@@ -23,7 +23,7 @@
     <div class="sidebar">
       <h3>智能配送规划</h3>
       <label>起点</label>
-      <input id="startInput" placeholder="例：109.561199,23.103332" value="109.561199,23.103332">
+      <input id="startInput" placeholder="例：109.561199,23.103332 或 广西贵港市" value="109.561199,23.103332">
 
       <label style="margin-top:15px;">目的地（可添加多个）</label>
       <div id="destList"></div>
@@ -47,7 +47,7 @@
   <script src="https://webapi.amap.com/maps?v=2.0&key=b5280cf1a14f4dea11bb03e25e1b72b9&plugin=AMap.Driving,AMap.Geocoder"></script>
 
   <script>
-    let map, startPoint = null, destinations = [];
+    let map, startPoint = null, startAddress = '', destinations = [];
     const MAX_TIME = 14400; // 4小时 = 14400秒
 
     function initMap() {
@@ -65,6 +65,20 @@
       list.appendChild(div);
     }
 
+    // 获取地址文本（参考前述正确的代码）
+    async function getAddressText(lnglat) {
+      return new Promise(resolve => {
+        const geocoder = new AMap.Geocoder();
+        geocoder.getAddress(lnglat, (status, result) => {
+          if (status === 'complete' && result && result.regeocode && result.regeocode.formattedAddress) {
+            resolve(result.regeocode.formattedAddress);
+          } else {
+            resolve('地址解析失败');
+          }
+        });
+      });
+    }
+
     async function startPlanning() {
       document.getElementById('status').innerHTML = '正在解析地址...';
       document.getElementById('resultInfo').innerHTML = '';
@@ -73,16 +87,24 @@
       const startStr = document.getElementById('startInput').value.trim();
       if (!startStr) return alert('请输入起点');
 
+      // 解析起点经纬度
       startPoint = await getLngLat(startStr);
       if (!startPoint) return alert('起点解析失败');
 
+      // 获取起点地址文本
+      startAddress = await getAddressText(startPoint);
+
+      // 解析所有目的地
       destinations = [];
       const inputs = document.querySelectorAll('#destList input');
       for (let input of inputs) {
         const val = input.value.trim();
         if (val) {
           const lnglat = await getLngLat(val);
-          if (lnglat) destinations.push({lnglat, name: val});
+          if (lnglat) {
+            const address = await getAddressText(lnglat);
+            destinations.push({lnglat, address});
+          }
         }
       }
 
@@ -180,21 +202,21 @@
               strokeOpacity: 0.9
             });
 
-            // 标注起点
+            // 标注起点（地址文本）
             new AMap.Marker({
               position: start,
               map: map,
               icon: new AMap.Icon({image: 'https://a.amap.com/jsapi_demos/static/demo-center/images/poi-marker-green.png', size: new AMap.Size(28,40)}),
-              label: {content: '起点', direction: 'top', offset: new AMap.Pixel(0, -45)}
+              label: {content: startAddress, direction: 'top', offset: new AMap.Pixel(0, -45)}
             });
 
-            // 标注每个目的地
+            // 标注每个目的地（地址文本）
             points.forEach(p => {
               new AMap.Marker({
                 position: p.lnglat,
                 map: map,
                 icon: new AMap.Icon({image: 'https://a.amap.com/jsapi_demos/static/demo-center/images/poi-marker-red.png', size: new AMap.Size(28,40)}),
-                label: {content: p.name, direction: 'right', offset: new AMap.Pixel(15, 0)}
+                label: {content: p.address, direction: 'right', offset: new AMap.Pixel(15, 0)}
               });
             });
 
@@ -220,7 +242,7 @@
           <div class="route-batch">
             <strong>第${r.batchIndex}批次</strong>：${r.points.length}个目的地<br>
             用时：${hours}小时<br>
-            目的地：${r.points.map(p => p.name).join(' → ')}
+            目的地：${r.points.map(p => p.address).join(' → ')}
           </div>`;
       });
 
