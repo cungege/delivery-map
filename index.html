@@ -44,26 +44,16 @@
       let completed = 0;
       let startLabeled = false;
 
-      // 最终修复版逆地理编码函数（兼容 status "1" 和 'complete'）
+      // 简化版：只判断 status === "1"
       function getAddress(lnglat, callback) {
         const geocoder = new AMap.Geocoder();
         geocoder.getAddress(lnglat, (status, result) => {
-          console.log('Geocoder 返回 → status:', status, 'result:', result); // 调试日志
-
-          // 兼容两种可能的返回结构
-          let regeocode = null;
-          if (result && result.regeocode) {
-            regeocode = result.regeocode;
-          } else if (status && typeof status === 'object' && status.regeocode) {
-            regeocode = status.regeocode;
-          }
-
-          if (regeocode && regeocode.formatted_address) {
-            const addr = regeocode.formatted_address;
-            console.log('✅ 成功提取地址:', addr);
-            callback(addr);
+          console.log('Geocoder 返回 status:', status);   // 调试用
+          if (status === "1" && result && result.regeocode && result.regeocode.formatted_address) {
+            console.log('✅ 提取到地址:', result.regeocode.formatted_address);
+            callback(result.regeocode.formatted_address);
           } else {
-            console.error('❌ 地址提取失败', {status, result});
+            console.error('❌ 地址获取失败 status:', status);
             callback('地址获取失败');
           }
         });
@@ -85,13 +75,45 @@
 
               // 获取终点地址
               getAddress(route.end, (endAddr) => {
+                // 绘制路线
                 const path = drivingRoute.steps.flatMap(step => step.path || []);
-                map.add(new AMap.Polyline({ 
-                  path: path, 
-                  strokeColor: route.color, 
-                  strokeWeight: 9, 
-                  strokeOpacity: 0.9 
-                }));
+                map.add(new AMap.Polyline({ path: path, strokeColor: route.color, strokeWeight: 9, strokeOpacity: 0.9 }));
 
                 // 保留起点/终点图例（title）
-                new AMap.Marker({ position: route.start, map: map, title: route.name
+                new AMap.Marker({ position: route.start, map: map, title: route.name + ' 起点' });
+                new AMap.Marker({ position: route.end,   map: map, title: route.name + ' 终点' });
+
+                // 共同起点地址标签（只显示一次）
+                if (!startLabeled) {
+                  new AMap.Marker({
+                    position: route.start,
+                    map: map,
+                    label: { content: startAddr, direction: 'top', offset: new AMap.Pixel(0, -45) }
+                  });
+                  startLabeled = true;
+                }
+
+                // 终点地址 + 距离 + 用时标签
+                const labelText = `${endAddr}<br><span style="font-size:12px;color:#666;">${distanceKm}KM / ${timeHour}h</span>`;
+                new AMap.Marker({
+                  position: route.end,
+                  map: map,
+                  label: { content: labelText, direction: 'right', offset: new AMap.Pixel(18, -8) }
+                });
+
+                completed++;
+                document.getElementById('status').innerHTML = `已完成 ${completed}/3 条路线`;
+
+                if (completed === routes.length) {
+                  map.setFitView();
+                  document.getElementById('status').innerHTML = '✅ 3条路线规划完成！';
+                }
+              });
+            }
+          });
+        });
+      });
+    });
+  </script>
+</body>
+</html>
