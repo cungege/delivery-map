@@ -6,7 +6,7 @@
   <style>
     html,body,#map{height:100%;margin:0;padding:0;font-family:Microsoft Yahei,sans-serif;}
     .container {display:flex;height:100%;}
-    .sidebar {width:320px;background:#fff;border-right:1px solid #ddd;padding:15px;overflow:auto;}
+    .sidebar {width:340px;background:#fff;border-right:1px solid #ddd;padding:15px;overflow:auto;}
     .map-container {flex:1;position:relative;}
     .legend {position:absolute;top:20px;left:20px;background:white;padding:12px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:999;font-size:14px;}
     .info {position:absolute;bottom:20px;left:20px;background:white;padding:10px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.3);z-index:999;font-size:13px;}
@@ -14,7 +14,7 @@
     button {background:#409eff;color:white;border:none;cursor:pointer;}
     .dest-item {display:flex;align-items:center;margin:5px 0;}
     .dest-item input {flex:1;}
-    .route-batch {margin:10px 0;padding:10px;border:1px solid #ddd;border-radius:6px;background:#f8f8f8;}
+    .route-batch {margin:10px 0;padding:12px;border:1px solid #ddd;border-radius:6px;background:#f8f8f8;}
   </style>
 </head>
 <body>
@@ -22,8 +22,8 @@
     <!-- 左侧输入面板 -->
     <div class="sidebar">
       <h3>智能配送规划</h3>
-      <label>起点（经纬度或地址）</label>
-      <input id="startInput" placeholder="例：109.561199,23.103332 或 广西贵港市" value="109.561199,23.103332">
+      <label>起点</label>
+      <input id="startInput" placeholder="例：109.561199,23.103332" value="109.561199,23.103332">
 
       <label style="margin-top:15px;">目的地（可添加多个）</label>
       <div id="destList"></div>
@@ -41,7 +41,6 @@
     </div>
   </div>
 
-  <!-- 安全密钥 + 高德JS API -->
   <script type="text/javascript">
     window._AMapSecurityConfig = { securityJsCode: 'd1696b36a67c28cdee2466920e4bacac' };
   </script>
@@ -55,7 +54,6 @@
       map = new AMap.Map('map', { zoom: 11, center: [109.561199, 23.103332] });
     }
 
-    // 添加目的地输入框
     function addDestination() {
       const list = document.getElementById('destList');
       const div = document.createElement('div');
@@ -67,19 +65,17 @@
       list.appendChild(div);
     }
 
-    // 开始规划
     async function startPlanning() {
       document.getElementById('status').innerHTML = '正在解析地址...';
+      document.getElementById('resultInfo').innerHTML = '';
       document.getElementById('legend').innerHTML = '';
 
-      // 获取起点
       const startStr = document.getElementById('startInput').value.trim();
       if (!startStr) return alert('请输入起点');
 
       startPoint = await getLngLat(startStr);
       if (!startPoint) return alert('起点解析失败');
 
-      // 获取所有目的地
       destinations = [];
       const inputs = document.querySelectorAll('#destList input');
       for (let input of inputs) {
@@ -92,14 +88,10 @@
 
       if (destinations.length === 0) return alert('请至少添加一个目的地');
 
-      // 贪心算法排序目的地（最近邻）
       destinations = greedySort(startPoint, destinations);
-
-      // 分批规划路线（每批不超过4小时）
       await planBatches();
     }
 
-    // 地址转经纬度
     async function getLngLat(str) {
       return new Promise(resolve => {
         if (str.includes(',')) {
@@ -118,21 +110,16 @@
       });
     }
 
-    // 贪心最近邻排序
     function greedySort(start, points) {
       const sorted = [];
       let current = start;
       let remaining = [...points];
 
       while (remaining.length > 0) {
-        let nearestIndex = 0;
-        let minDist = Infinity;
+        let nearestIndex = 0, minDist = Infinity;
         for (let i = 0; i < remaining.length; i++) {
           const dist = AMap.GeometryUtil.distance(current, remaining[i].lnglat);
-          if (dist < minDist) {
-            minDist = dist;
-            nearestIndex = i;
-          }
+          if (dist < minDist) { minDist = dist; nearestIndex = i; }
         }
         sorted.push(remaining[nearestIndex]);
         current = remaining[nearestIndex].lnglat;
@@ -141,64 +128,49 @@
       return sorted;
     }
 
-    // 分批规划
     async function planBatches() {
-      let batch = [];
-      let batchTime = 0;
-      let batchIndex = 1;
-      const allRoutes = [];
+      let batch = [], batchIndex = 1, allRoutes = [];
 
       for (let i = 0; i < destinations.length; i++) {
         const tempBatch = [...batch, destinations[i]];
         const time = await calculateBatchTime(startPoint, tempBatch);
 
         if (time > MAX_TIME && batch.length > 0) {
-          // 当前批次已满，规划并保存
           const route = await planOneBatch(startPoint, batch, batchIndex);
           allRoutes.push(route);
           batchIndex++;
           batch = [destinations[i]];
-          batchTime = await calculateBatchTime(startPoint, batch);
         } else {
           batch = tempBatch;
-          batchTime = time;
         }
       }
 
-      // 最后一批
       if (batch.length > 0) {
         const route = await planOneBatch(startPoint, batch, batchIndex);
         allRoutes.push(route);
       }
 
-      // 显示所有批次
       showAllBatches(allRoutes);
     }
 
-    // 计算一批总用时
     async function calculateBatchTime(start, points) {
       return new Promise(resolve => {
         const driving = new AMap.Driving({policy: AMap.DrivingPolicy.LEAST_TIME});
         const waypoints = points.map(p => p.lnglat);
         driving.search(start, waypoints[waypoints.length-1], {waypoints: waypoints.slice(0,-1)}, (status, result) => {
-          if (status === 'complete' && result.routes.length) {
-            resolve(result.routes[0].time);
-          } else {
-            resolve(999999);
-          }
+          resolve(status === 'complete' && result.routes.length ? result.routes[0].time : 999999);
         });
       });
     }
 
-    // 规划单批路线
     async function planOneBatch(start, points, batchIndex) {
       return new Promise(resolve => {
         const driving = new AMap.Driving({policy: AMap.DrivingPolicy.LEAST_TIME, hideMarkers: true});
         const waypoints = points.map(p => p.lnglat);
+
         driving.search(start, waypoints[waypoints.length-1], {waypoints: waypoints.slice(0,-1)}, (status, result) => {
           if (status === 'complete' && result.routes.length) {
             const route = result.routes[0];
-            // 画路线
             const path = route.steps.flatMap(step => step.path || []);
             const polyline = new AMap.Polyline({
               map: map,
@@ -207,30 +179,60 @@
               strokeWeight: 8,
               strokeOpacity: 0.9
             });
+
+            // 标注起点
+            new AMap.Marker({
+              position: start,
+              map: map,
+              icon: new AMap.Icon({image: 'https://a.amap.com/jsapi_demos/static/demo-center/images/poi-marker-green.png', size: new AMap.Size(28,40)}),
+              label: {content: '起点', direction: 'top', offset: new AMap.Pixel(0, -45)}
+            });
+
+            // 标注每个目的地
+            points.forEach(p => {
+              new AMap.Marker({
+                position: p.lnglat,
+                map: map,
+                icon: new AMap.Icon({image: 'https://a.amap.com/jsapi_demos/static/demo-center/images/poi-marker-red.png', size: new AMap.Size(28,40)}),
+                label: {content: p.name, direction: 'right', offset: new AMap.Pixel(15, 0)}
+              });
+            });
+
             resolve({polyline, time: route.time, distance: route.distance, points: points, batchIndex});
           }
         });
       });
     }
 
-    // 颜色区分不同批次
     function getBatchColor(index) {
       const colors = ['#FF0000', '#00FF00', '#0000FF', '#FF00FF', '#00FFFF'];
       return colors[(index-1) % colors.length];
     }
 
-    // 显示所有批次
     function showAllBatches(routes) {
-      let html = '<h4>规划结果（共 ' + routes.length + ' 批次）</h4>';
+      let html = `<h4>规划结果（共 ${routes.length} 批次）</h4>`;
+      let totalTime = 0;
+
       routes.forEach(r => {
         const hours = (r.time / 3600).toFixed(1);
-        html += `<div class="route-batch">第${r.batchIndex}批次：${r.points.length}个目的地 | ${hours}小时</div>`;
+        totalTime += r.time;
+        html += `
+          <div class="route-batch">
+            <strong>第${r.batchIndex}批次</strong>：${r.points.length}个目的地<br>
+            用时：${hours}小时<br>
+            目的地：${r.points.map(p => p.name).join(' → ')}
+          </div>`;
       });
+
+      const totalHours = (totalTime / 3600).toFixed(1);
+      html += `<div style="margin-top:15px;padding:10px;background:#f0f0f0;border-radius:6px;">
+                 <strong>总计用时：</strong>${totalHours}小时
+               </div>`;
+
       document.getElementById('resultInfo').innerHTML = html;
       document.getElementById('status').innerHTML = '✅ 规划完成！';
     }
 
-    // 初始化
     window.onload = initMap;
   </script>
 </body>
