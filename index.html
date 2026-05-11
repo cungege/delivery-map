@@ -9,10 +9,6 @@
       position: absolute; top: 20px; left: 20px; background: white; padding: 12px; border-radius: 8px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 999; font-size: 15px; line-height: 1.8;
     }
-    .address-panel {
-      position: absolute; top: 20px; right: 20px; background: white; padding: 15px; border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 999; font-size: 14px; line-height: 1.8; max-width: 260px;
-    }
     .info {
       position: absolute; bottom: 20px; left: 20px; background: white; padding: 8px 12px; border-radius: 6px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.3); z-index: 999; font-size: 13px;
@@ -30,18 +26,12 @@
     <span style="color:#0000FF;">● 组3（蓝色）</span>
   </div>
 
-  <!-- 地址信息面板（同一地点只显示一次） -->
-  <div class="address-panel" id="addressPanel">
-    <strong>地址信息</strong><br>
-    <span id="addresses">加载中...</span>
-  </div>
-
   <div class="info" id="status">正在规划路线...</div>
 
-  <!-- 安全密钥必须在脚本加载之前 -->
+  <!-- 关键修复：安全密钥必须放在 AMap 脚本加载之前！ -->
   <script type="text/javascript">
     window._AMapSecurityConfig = {
-      securityJsCode: 'd1696b36a67c28cdee2466920e4bacac'   // 请确认这是你最新的安全密钥
+      securityJsCode: '【在这里粘贴你最新的安全密钥】'
     };
   </script>
 
@@ -56,24 +46,19 @@
     map.on('complete', function() {
       console.log('✅ 地图加载完成，开始规划路线');
 
-      // ===== 在这里修改起点和终点地址（同一地点只写一次）=====
       const routes = [
-        { name: "组1", start: [109.561199,23.103332], startName: "广西贵港市港北区（共同起点）", 
-          end: [110.190964,23.583378], endName: "广西来宾市", color: "#FF0000" },
-        { name: "组2", start: [109.561199,23.103332], startName: "广西贵港市港北区（共同起点）", 
-          end: [109.74654,22.76897],   endName: "广西玉林市", color: "#00FF00" },
-        { name: "组3", start: [109.561199,23.103332], startName: "广西贵港市港北区（共同起点）", 
-          end: [110.365833,23.292222], endName: "广西桂平市", color: "#0000FF" }
+        { name: "组1", start: [109.561199,23.103332], end: [110.190964,23.583378], color: "#FF0000" },
+        { name: "组2", start: [109.561199,23.103332], end: [109.74654,22.76897],   color: "#00FF00" },
+        { name: "组3", start: [109.561199,23.103332], end: [110.365833,23.292222], color: "#0000FF" }
       ];
 
       let completed = 0;
-      let addressHTML = '<strong>共同起点：</strong>' + routes[0].startName + '<br><br>';
 
       routes.forEach(route => {
         new AMap.Driving({
           map: map,
           policy: AMap.DrivingPolicy.LEAST_TIME,
-          hideMarkers: true,        // ← 关键：移除蓝色大头针
+          hideMarkers: false,
           autoFitView: false
         }).search(route.start, route.end, (status, result) => {
           if (status === 'complete' && result.routes && result.routes.length > 0) {
@@ -87,12 +72,8 @@
             });
             map.add(polyline);
 
-            // 自定义起点终点图标
             new AMap.Marker({ position: route.start, map: map, title: route.name + ' 起点' });
             new AMap.Marker({ position: route.end,   map: map, title: route.name + ' 终点' });
-
-            // 收集地址（同一地点只显示一次）
-            addressHTML += `<strong>${route.name}：</strong> ${route.endName}<br>`;
 
             completed++;
             document.getElementById('status').innerHTML = `已完成 ${completed}/3 条路线`;
@@ -100,10 +81,10 @@
             if (completed === routes.length) {
               map.setFitView();
               document.getElementById('status').innerHTML = '✅ 3条路线规划完成！';
-              document.getElementById('addresses').innerHTML = addressHTML;
             }
           } else {
             console.error(`路线 ${route.name} 失败`, result);
+            document.getElementById('status').innerHTML = `⚠️ ${route.name} 规划失败`;
           }
         });
       });
