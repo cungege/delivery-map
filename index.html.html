@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>3组配送路线规划 - 高德地图</title>
+  <style>html,body,#map{height:100%;margin:0;padding:0;}</style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <!-- 高德JS API加载（v2.0） -->
+  <script src="https://webapi.amap.com/maps?v=2.0&key=b5280cf1a14f4dea11bb03e25e1b72b9&plugin=AMap.Driving"></script>
+  <script>
+    // === 必须配置安全密钥（高德官方要求）===
+    window._AMapSecurityConfig = {
+      securityJsCode: 'd1696b36a67c28cdee2466920e4bacac'
+    };
+
+    const map = new AMap.Map('map', {
+      zoom: 11,
+      center: [116.397428, 39.90923]  // 默认北京中心，可改
+    });
+
+    // ===== 下面替换成你3组配送员的真实经纬度 =====
+    const routes = [
+      { name: "组1", start: [109.561199,23.103332], end: [110.190964,23.583378], color: "#FF0000" },  // 红色
+      { name: "组2", start: [109.561199,23.103332], end: [109.74654,22.76897], color: "#00FF00" },  // 绿色
+      { name: "组3", start: [109.561199,23.103332], end: [110.365833,23.292222], color: "#0000FF" }   // 蓝色
+    ];
+
+    routes.forEach(route => {
+      new AMap.Driving({
+        map: map,
+        policy: AMap.DrivingPolicy.LEAST_TIME,
+        hideMarkers: false,
+        autoFitView: true
+      }).search(route.start, route.end, (status, result) => {
+        if (status === 'complete' && result.routes.length) {
+          const path = result.routes[0].steps.flatMap(step => step.path);
+          const polyline = new AMap.Polyline({
+            path: path,
+            strokeColor: route.color,
+            strokeWeight: 8,
+            strokeOpacity: 0.85,
+            lineJoin: 'round'
+          });
+          map.add(polyline);
+
+          // 起点终点标记
+          new AMap.Marker({ position: route.start, map: map, title: route.name + ' 起点' });
+          new AMap.Marker({ position: route.end, map: map, title: route.name + ' 终点' });
+        }
+      });
+    });
+  </script>
+</body>
+</html>
