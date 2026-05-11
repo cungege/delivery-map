@@ -5,14 +5,8 @@
   <title>3组配送路线规划 - 高德地图</title>
   <style>
     html,body,#map{height:100%;margin:0;padding:0;}
-    .legend {
-      position: absolute; top: 20px; left: 20px; background: white; padding: 12px; border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 999; font-size: 15px; line-height: 1.8;
-    }
-    .info {
-      position: absolute; bottom: 20px; left: 20px; background: white; padding: 8px 12px; border-radius: 6px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3); z-index: 999; font-size: 13px;
-    }
+    .legend {position: absolute; top: 20px; left: 20px; background: white; padding: 12px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 999; font-size: 15px; line-height: 1.8;}
+    .info {position: absolute; bottom: 20px; left: 20px; background: white; padding: 8px 12px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); z-index: 999; font-size: 13px;}
   </style>
 </head>
 <body>
@@ -28,23 +22,18 @@
 
   <div class="info" id="status">正在规划路线并获取地址...</div>
 
-  <!-- 安全密钥必须放在脚本加载之前 -->
+  <!-- 安全密钥 -->
   <script type="text/javascript">
-    window._AMapSecurityConfig = {
-      securityJsCode: 'd1696b36a67c28cdee2466920e4bacac'
-    };
+    window._AMapSecurityConfig = { securityJsCode: 'd1696b36a67c28cdee2466920e4bacac' };
   </script>
 
-  <!-- 高德JS API（新增Geocoder插件） -->
+  <!-- 高德JS API -->
   <script src="https://webapi.amap.com/maps?v=2.0&key=b5280cf1a14f4dea11bb03e25e1b72b9&plugin=AMap.Driving,AMap.Geocoder"></script>
   <script>
-    const map = new AMap.Map('map', {
-      zoom: 10,
-      center: [109.561199, 23.103332]
-    });
+    const map = new AMap.Map('map', { zoom: 10, center: [109.561199, 23.103332] });
 
     map.on('complete', function() {
-      console.log('✅ 地图加载完成，开始规划路线');
+      console.log('✅ 地图加载完成');
 
       const routes = [
         { name: "组1", start: [109.561199,23.103332], end: [110.190964,23.583378], color: "#FF0000" },
@@ -54,29 +43,30 @@
 
       let completed = 0;
       let startLabeled = false;
-      let startAddress = '共同起点';
 
-      // 逆地理编码（严格使用 $.regeocode.formatted_address）
+      // 修复后的逆地理编码函数（兼容 status "1" 和 'complete'）
       function getAddress(lnglat, callback) {
         const geocoder = new AMap.Geocoder();
         geocoder.getAddress(lnglat, (status, result) => {
-          if (status === 'complete' && result && result.regeocode) {
-            callback(result.regeocode.formatted_address || '地址获取失败');
+          console.log('Geocoder 返回 → status:', status, 'result:', result);   // 调试用
+          if ((status === 'complete' || status === '1') && result && result.regeocode) {
+            const addr = result.regeocode.formatted_address || '地址为空';
+            console.log('✅ 成功获取地址:', addr);
+            callback(addr);
           } else {
+            console.error('❌ 地址获取失败 status:', status, 'result:', result);
             callback('地址获取失败');
           }
         });
       }
 
       // 先获取共同起点地址
-      getAddress(routes[0].start, (addr) => {
-        startAddress = addr;
-
+      getAddress(routes[0].start, (startAddr) => {
         routes.forEach(route => {
           new AMap.Driving({
             map: map,
             policy: AMap.DrivingPolicy.LEAST_TIME,
-            hideMarkers: true,        // ← 彻底移除蓝色图钉
+            hideMarkers: true,
             autoFitView: false
           }).search(route.start, route.end, (status, result) => {
             if (status === 'complete' && result.routes && result.routes.length > 0) {
@@ -88,52 +78,30 @@
               getAddress(route.end, (endAddr) => {
                 // 绘制路线
                 const path = drivingRoute.steps.flatMap(step => step.path || []);
-                const polyline = new AMap.Polyline({
-                  path: path,
-                  strokeColor: route.color,
-                  strokeWeight: 9,
-                  strokeOpacity: 0.9,
-                  lineJoin: 'round'
-                });
-                map.add(polyline);
+                map.add(new AMap.Polyline({ path, strokeColor: route.color, strokeWeight: 9, strokeOpacity: 0.9 }));
 
-                // === 保留你指定的起点/终点Marker + title ===
-                new AMap.Marker({ 
-                  position: route.start, 
-                  map: map, 
-                  title: route.name + ' 起点' 
-                });
+                // 起点Marker（保留 title）
+                new AMap.Marker({ position: route.start, map: map, title: route.name + ' 起点' });
 
-                new AMap.Marker({ 
-                  position: route.end, 
-                  map: map, 
-                  title: route.name + ' 终点' 
-                });
+                // 终点Marker（保留 title）
+                new AMap.Marker({ position: route.end, map: map, title: route.name + ' 终点' });
 
-                // 共同起点地址标注（只显示一次）
+                // 共同起点地址标签（只显示一次）
                 if (!startLabeled) {
                   new AMap.Marker({
                     position: route.start,
                     map: map,
-                    label: {
-                      content: startAddress,
-                      direction: 'top',
-                      offset: new AMap.Pixel(0, -45)
-                    }
+                    label: { content: startAddr, direction: 'top', offset: new AMap.Pixel(0, -45) }
                   });
                   startLabeled = true;
                 }
 
-                // 终点地址 + 距离 + 用时标注
+                // 终点地址 + 距离 + 用时标签
                 const labelText = `${endAddr}<br><span style="font-size:12px;color:#666;">${distanceKm}KM / ${timeHour}h</span>`;
                 new AMap.Marker({
                   position: route.end,
                   map: map,
-                  label: {
-                    content: labelText,
-                    direction: 'right',
-                    offset: new AMap.Pixel(18, -8)
-                  }
+                  label: { content: labelText, direction: 'right', offset: new AMap.Pixel(18, -8) }
                 });
 
                 completed++;
@@ -144,8 +112,6 @@
                   document.getElementById('status').innerHTML = '✅ 3条路线规划完成！';
                 }
               });
-            } else {
-              console.error(`路线 ${route.name} 失败`, result);
             }
           });
         });
