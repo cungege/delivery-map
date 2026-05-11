@@ -2,126 +2,236 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>3组配送路线规划 - 高德地图</title>
+  <title>智能配送路线规划 - 高德地图</title>
   <style>
-    html,body,#map{height:100%;margin:0;padding:0;}
-    .legend {position: absolute; top: 20px; left: 20px; background: white; padding: 12px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 999; font-size: 15px; line-height: 1.8;}
-    .info {position: absolute; bottom: 20px; left: 20px; background: white; padding: 8px 12px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); z-index: 999; font-size: 13px;}
+    html,body,#map{height:100%;margin:0;padding:0;font-family:Microsoft Yahei,sans-serif;}
+    .container {display:flex;height:100%;}
+    .sidebar {width:320px;background:#fff;border-right:1px solid #ddd;padding:15px;overflow:auto;}
+    .map-container {flex:1;position:relative;}
+    .legend {position:absolute;top:20px;left:20px;background:white;padding:12px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:999;font-size:14px;}
+    .info {position:absolute;bottom:20px;left:20px;background:white;padding:10px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.3);z-index:999;font-size:13px;}
+    input,button {margin:5px 0;padding:8px;width:100%;border-radius:4px;}
+    button {background:#409eff;color:white;border:none;cursor:pointer;}
+    .dest-item {display:flex;align-items:center;margin:5px 0;}
+    .dest-item input {flex:1;}
+    .route-batch {margin:10px 0;padding:10px;border:1px solid #ddd;border-radius:6px;background:#f8f8f8;}
   </style>
 </head>
 <body>
-  <div id="map"></div>
+  <div class="container">
+    <!-- 左侧输入面板 -->
+    <div class="sidebar">
+      <h3>智能配送规划</h3>
+      <label>起点（经纬度或地址）</label>
+      <input id="startInput" placeholder="例：109.561199,23.103332 或 广西贵港市" value="109.561199,23.103332">
 
-  <!-- 图例 -->
-  <div class="legend">
-    <strong>3组配送路线</strong><br>
-    <span style="color:#FF0000;">● 组1（红色）</span><br>
-    <span style="color:#00FF00;">● 组2（绿色）</span><br>
-    <span style="color:#0000FF;">● 组3（蓝色）</span>
+      <label style="margin-top:15px;">目的地（可添加多个）</label>
+      <div id="destList"></div>
+      <button onclick="addDestination()">+ 添加目的地</button>
+
+      <button onclick="startPlanning()" style="margin-top:20px;background:#67c23a;">🚀 开始规划路线</button>
+      <div id="resultInfo" style="margin-top:15px;font-size:13px;"></div>
+    </div>
+
+    <!-- 地图区域 -->
+    <div class="map-container">
+      <div id="map"></div>
+      <div class="legend" id="legend"></div>
+      <div class="info" id="status">等待规划...</div>
+    </div>
   </div>
 
-  <div class="info" id="status">正在规划路线并获取地址...</div>
-
-  <!-- 安全密钥 -->
+  <!-- 安全密钥 + 高德JS API -->
   <script type="text/javascript">
     window._AMapSecurityConfig = { securityJsCode: 'd1696b36a67c28cdee2466920e4bacac' };
   </script>
-
-  <!-- 高德JS API -->
   <script src="https://webapi.amap.com/maps?v=2.0&key=b5280cf1a14f4dea11bb03e25e1b72b9&plugin=AMap.Driving,AMap.Geocoder"></script>
+
   <script>
-    const map = new AMap.Map('map', { zoom: 10, center: [109.561199, 23.103332] });
+    let map, startPoint = null, destinations = [];
+    const MAX_TIME = 14400; // 4小时 = 14400秒
 
-    map.on('complete', function() {
-      console.log('✅ 地图加载完成');
+    function initMap() {
+      map = new AMap.Map('map', { zoom: 11, center: [109.561199, 23.103332] });
+    }
 
-      const routes = [
-        { name: "组1", start: [109.561199,23.103332], end: [110.190964,23.583378], color: "#FF0000" },
-        { name: "组2", start: [109.561199,23.103332], end: [109.74654,22.76897],   color: "#00FF00" },
-        { name: "组3", start: [109.561199,23.103332], end: [110.365833,23.292222], color: "#0000FF" }
-      ];
+    // 添加目的地输入框
+    function addDestination() {
+      const list = document.getElementById('destList');
+      const div = document.createElement('div');
+      div.className = 'dest-item';
+      div.innerHTML = `
+        <input type="text" placeholder="目的地经纬度或地址" style="flex:1;">
+        <button onclick="this.parentNode.remove()" style="width:40px;margin-left:5px;background:#f56c6c;">删</button>
+      `;
+      list.appendChild(div);
+    }
 
-      let completed = 0;
-      let startLabeled = false;
+    // 开始规划
+    async function startPlanning() {
+      document.getElementById('status').innerHTML = '正在解析地址...';
+      document.getElementById('legend').innerHTML = '';
 
-      // 严格按照你提供的 regeo 结构提取 formattedAddress
-      function getAddress(lnglat, callback) {
-        const geocoder = new AMap.Geocoder();
-        geocoder.getAddress(lnglat, (status, result) => {
-          console.log('【Geocoder 返回】status:', status);
-          console.log('【Geocoder 返回】完整 result:', result);   // 请复制这段日志给我
+      // 获取起点
+      const startStr = document.getElementById('startInput').value.trim();
+      if (!startStr) return alert('请输入起点');
 
-          if (status === 'complete' && result && result.regeocode && result.regeocode.formattedAddress) {
-            const addr = result.regeocode.formattedAddress;
-            console.log('✅ 成功提取地址:', addr);
-            callback(addr);
-          } else {
-            console.error('❌ 地址提取失败');
-            callback('地址获取失败');
-          }
-        });
+      startPoint = await getLngLat(startStr);
+      if (!startPoint) return alert('起点解析失败');
+
+      // 获取所有目的地
+      destinations = [];
+      const inputs = document.querySelectorAll('#destList input');
+      for (let input of inputs) {
+        const val = input.value.trim();
+        if (val) {
+          const lnglat = await getLngLat(val);
+          if (lnglat) destinations.push({lnglat, name: val});
+        }
       }
 
-      // 先获取共同起点地址
-      getAddress(routes[0].start, (startAddr) => {
-        routes.forEach(route => {
-          new AMap.Driving({
-            map: map,
-            policy: AMap.DrivingPolicy.LEAST_TIME,
-            hideMarkers: true,
-            autoFitView: false
-          }).search(route.start, route.end, (status, result) => {
-            if (status === 'complete' && result.routes && result.routes.length > 0) {
-              const drivingRoute = result.routes[0];
-              const distanceKm = (drivingRoute.distance / 1000).toFixed(1);
-              const timeHour = (drivingRoute.time / 3600).toFixed(1);
+      if (destinations.length === 0) return alert('请至少添加一个目的地');
 
-              // 获取终点地址
-              getAddress(route.end, (endAddr) => {
-                // 绘制路线
-                const path = drivingRoute.steps.flatMap(step => step.path || []);
-                map.add(new AMap.Polyline({ 
-                  path: path, 
-                  strokeColor: route.color, 
-                  strokeWeight: 9, 
-                  strokeOpacity: 0.9 
-                }));
+      // 贪心算法排序目的地（最近邻）
+      destinations = greedySort(startPoint, destinations);
 
-                // 保留起点/终点图例（title）
-                new AMap.Marker({ position: route.start, map: map, title: route.name + ' 起点' });
-                new AMap.Marker({ position: route.end,   map: map, title: route.name + ' 终点' });
+      // 分批规划路线（每批不超过4小时）
+      await planBatches();
+    }
 
-                // 共同起点地址标签（只显示一次）
-                if (!startLabeled) {
-                  new AMap.Marker({
-                    position: route.start,
-                    map: map,
-                    label: { content: startAddr, direction: 'top', offset: new AMap.Pixel(0, -45) }
-                  });
-                  startLabeled = true;
-                }
-
-                // 终点地址 + 距离 + 用时标签
-                const labelText = `${endAddr}<br><span style="font-size:12px;color:#666;">${distanceKm}KM / ${timeHour}h</span>`;
-                new AMap.Marker({
-                  position: route.end,
-                  map: map,
-                  label: { content: labelText, direction: 'right', offset: new AMap.Pixel(18, -8) }
-                });
-
-                completed++;
-                document.getElementById('status').innerHTML = `已完成 ${completed}/3 条路线`;
-
-                if (completed === routes.length) {
-                  map.setFitView();
-                  document.getElementById('status').innerHTML = '✅ 3条路线规划完成！';
-                }
-              });
+    // 地址转经纬度
+    async function getLngLat(str) {
+      return new Promise(resolve => {
+        if (str.includes(',')) {
+          const [lng, lat] = str.split(',').map(Number);
+          resolve(new AMap.LngLat(lng, lat));
+        } else {
+          const geocoder = new AMap.Geocoder();
+          geocoder.getLocation(str, (status, result) => {
+            if (status === 'complete' && result.geocodes.length) {
+              resolve(result.geocodes[0].location);
+            } else {
+              resolve(null);
             }
           });
+        }
+      });
+    }
+
+    // 贪心最近邻排序
+    function greedySort(start, points) {
+      const sorted = [];
+      let current = start;
+      let remaining = [...points];
+
+      while (remaining.length > 0) {
+        let nearestIndex = 0;
+        let minDist = Infinity;
+        for (let i = 0; i < remaining.length; i++) {
+          const dist = AMap.GeometryUtil.distance(current, remaining[i].lnglat);
+          if (dist < minDist) {
+            minDist = dist;
+            nearestIndex = i;
+          }
+        }
+        sorted.push(remaining[nearestIndex]);
+        current = remaining[nearestIndex].lnglat;
+        remaining.splice(nearestIndex, 1);
+      }
+      return sorted;
+    }
+
+    // 分批规划
+    async function planBatches() {
+      let batch = [];
+      let batchTime = 0;
+      let batchIndex = 1;
+      const allRoutes = [];
+
+      for (let i = 0; i < destinations.length; i++) {
+        const tempBatch = [...batch, destinations[i]];
+        const time = await calculateBatchTime(startPoint, tempBatch);
+
+        if (time > MAX_TIME && batch.length > 0) {
+          // 当前批次已满，规划并保存
+          const route = await planOneBatch(startPoint, batch, batchIndex);
+          allRoutes.push(route);
+          batchIndex++;
+          batch = [destinations[i]];
+          batchTime = await calculateBatchTime(startPoint, batch);
+        } else {
+          batch = tempBatch;
+          batchTime = time;
+        }
+      }
+
+      // 最后一批
+      if (batch.length > 0) {
+        const route = await planOneBatch(startPoint, batch, batchIndex);
+        allRoutes.push(route);
+      }
+
+      // 显示所有批次
+      showAllBatches(allRoutes);
+    }
+
+    // 计算一批总用时
+    async function calculateBatchTime(start, points) {
+      return new Promise(resolve => {
+        const driving = new AMap.Driving({policy: AMap.DrivingPolicy.LEAST_TIME});
+        const waypoints = points.map(p => p.lnglat);
+        driving.search(start, waypoints[waypoints.length-1], {waypoints: waypoints.slice(0,-1)}, (status, result) => {
+          if (status === 'complete' && result.routes.length) {
+            resolve(result.routes[0].time);
+          } else {
+            resolve(999999);
+          }
         });
       });
-    });
+    }
+
+    // 规划单批路线
+    async function planOneBatch(start, points, batchIndex) {
+      return new Promise(resolve => {
+        const driving = new AMap.Driving({policy: AMap.DrivingPolicy.LEAST_TIME, hideMarkers: true});
+        const waypoints = points.map(p => p.lnglat);
+        driving.search(start, waypoints[waypoints.length-1], {waypoints: waypoints.slice(0,-1)}, (status, result) => {
+          if (status === 'complete' && result.routes.length) {
+            const route = result.routes[0];
+            // 画路线
+            const path = route.steps.flatMap(step => step.path || []);
+            const polyline = new AMap.Polyline({
+              map: map,
+              path: path,
+              strokeColor: getBatchColor(batchIndex),
+              strokeWeight: 8,
+              strokeOpacity: 0.9
+            });
+            resolve({polyline, time: route.time, distance: route.distance, points: points, batchIndex});
+          }
+        });
+      });
+    }
+
+    // 颜色区分不同批次
+    function getBatchColor(index) {
+      const colors = ['#FF0000', '#00FF00', '#0000FF', '#FF00FF', '#00FFFF'];
+      return colors[(index-1) % colors.length];
+    }
+
+    // 显示所有批次
+    function showAllBatches(routes) {
+      let html = '<h4>规划结果（共 ' + routes.length + ' 批次）</h4>';
+      routes.forEach(r => {
+        const hours = (r.time / 3600).toFixed(1);
+        html += `<div class="route-batch">第${r.batchIndex}批次：${r.points.length}个目的地 | ${hours}小时</div>`;
+      });
+      document.getElementById('resultInfo').innerHTML = html;
+      document.getElementById('status').innerHTML = '✅ 规划完成！';
+    }
+
+    // 初始化
+    window.onload = initMap;
   </script>
 </body>
 </html>
