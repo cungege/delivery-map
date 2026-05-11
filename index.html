@@ -44,12 +44,12 @@
       let completed = 0;
       let startLabeled = false;
 
-      // 简化版：只判断 status === "1"
+      // 只保留 status === 'complete' 判断（严格按照你的要求）
       function getAddress(lnglat, callback) {
         const geocoder = new AMap.Geocoder();
         geocoder.getAddress(lnglat, (status, result) => {
-          console.log('Geocoder 返回 status:', status);   // 调试用
-          if (status === "1" && result && result.regeocode && result.regeocode.formatted_address) {
+          console.log('Geocoder 返回 status:', status);   // 调试日志
+          if (status === 'complete' && result && result.regeocode && result.regeocode.formatted_address) {
             console.log('✅ 提取到地址:', result.regeocode.formatted_address);
             callback(result.regeocode.formatted_address);
           } else {
@@ -73,7 +73,6 @@
               const distanceKm = (drivingRoute.distance / 1000).toFixed(1);
               const timeHour = (drivingRoute.time / 3600).toFixed(1);
 
-              // 获取终点地址
               getAddress(route.end, (endAddr) => {
                 // 绘制路线
                 const path = drivingRoute.steps.flatMap(step => step.path || []);
