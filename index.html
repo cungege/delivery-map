@@ -27,13 +27,13 @@
     window._AMapSecurityConfig = { securityJsCode: 'd1696b36a67c28cdee2466920e4bacac' };
   </script>
 
-  <!-- 高德JS API（Driving + Geocoder） -->
+  <!-- 高德JS API -->
   <script src="https://webapi.amap.com/maps?v=2.0&key=b5280cf1a14f4dea11bb03e25e1b72b9&plugin=AMap.Driving,AMap.Geocoder"></script>
   <script>
     const map = new AMap.Map('map', { zoom: 10, center: [109.561199, 23.103332] });
 
     map.on('complete', function() {
-      console.log('✅ 地图加载完成，开始规划路线');
+      console.log('✅ 地图加载完成');
 
       const routes = [
         { name: "组1", start: [109.561199,23.103332], end: [110.190964,23.583378], color: "#FF0000" },
@@ -44,15 +44,15 @@
       let completed = 0;
       let startLabeled = false;
 
-      // 严格从 regeo 响应中提取 formatted_address
+      // 严格按照你提供的 regeo 结构提取 formattedAddress
       function getAddress(lnglat, callback) {
         const geocoder = new AMap.Geocoder();
         geocoder.getAddress(lnglat, (status, result) => {
           console.log('【Geocoder 返回】status:', status);
-          console.log('【Geocoder 返回】完整 result:', result);   // 请复制这段给我
+          console.log('【Geocoder 返回】完整 result:', result);   // 请复制这段日志给我
 
-          if (status === 'complete' && result && result.regeocode && result.regeocode.formatted_address) {
-            const addr = result.regeocode.formatted_address;
+          if (status === 'complete' && result && result.regeocode && result.regeocode.formattedAddress) {
+            const addr = result.regeocode.formattedAddress;
             console.log('✅ 成功提取地址:', addr);
             callback(addr);
           } else {
