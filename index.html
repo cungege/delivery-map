@@ -35,7 +35,7 @@
     };
   </script>
 
-  <!-- 高德JS API（新增 Geocoder 插件用于逆地理编码） -->
+  <!-- 高德JS API -->
   <script src="https://webapi.amap.com/maps?v=2.0&key=b5280cf1a14f4dea11bb03e25e1b72b9&plugin=AMap.Driving,AMap.Geocoder"></script>
   <script>
     const map = new AMap.Map('map', {
@@ -44,7 +44,7 @@
     });
 
     map.on('complete', function() {
-      console.log('✅ 地图加载完成，开始规划路线并获取地址');
+      console.log('✅ 地图加载完成');
 
       const routes = [
         { name: "组1", start: [109.561199,23.103332], end: [110.190964,23.583378], color: "#FF0000" },
@@ -56,12 +56,12 @@
       let startLabeled = false;
       let startAddress = '共同起点';
 
-      // 逆地理编码辅助函数
+      // 逆地理编码（使用 $.regeocode.formatted_address）
       function getAddress(lnglat, callback) {
         const geocoder = new AMap.Geocoder();
         geocoder.getAddress(lnglat, (status, result) => {
-          if (status === 'complete' && result.regeocode) {
-            callback(result.regeocode.formatted_address);
+          if (status === 'complete' && result && result.regeocode) {
+            callback(result.regeocode.formatted_address || '地址获取失败');
           } else {
             callback('地址获取失败');
           }
@@ -70,22 +70,20 @@
 
       // 先获取共同起点地址
       getAddress(routes[0].start, (addr) => {
-        startAddress = addr || '共同起点';
-        
-        // 开始规划每条路线
+        startAddress = addr;
+
         routes.forEach(route => {
           new AMap.Driving({
             map: map,
             policy: AMap.DrivingPolicy.LEAST_TIME,
-            hideMarkers: true,
+            hideMarkers: true,        // 彻底移除蓝色大头针
             autoFitView: false
           }).search(route.start, route.end, (status, result) => {
             if (status === 'complete' && result.routes && result.routes.length > 0) {
               const drivingRoute = result.routes[0];
-              const distanceKm = (drivingRoute.distance / 1000).toFixed(1);     // 公里
-              const timeMin = Math.round(drivingRoute.time / 60);               // 分钟
+              const distanceKm = (drivingRoute.distance / 1000).toFixed(1);
+              const timeMin = Math.round(drivingRoute.time / 60);
 
-              // 终点地址（逆地理编码）
               getAddress(route.end, (endAddr) => {
                 // 绘制路线
                 const path = drivingRoute.steps.flatMap(step => step.path || []);
@@ -98,11 +96,16 @@
                 });
                 map.add(polyline);
 
-                // 共同起点标签（只显示一次）
+                // === 起点：绿色标识（只显示一次）===
                 if (!startLabeled) {
                   new AMap.Marker({
                     position: route.start,
                     map: map,
+                    icon: new AMap.Icon({
+                      image: 'https://a.amap.com/jsapi_demos/static/demo-center/images/poi-marker-green.png',
+                      size: new AMap.Size(28, 40),
+                      imageSize: new AMap.Size(28, 40)
+                    }),
                     label: {
                       content: startAddress,
                       direction: 'top',
@@ -112,11 +115,16 @@
                   startLabeled = true;
                 }
 
-                // 终点标签（地址 + 距离 + 时间）
+                // === 终点：红色标识 + 地址 + 距离 + 时间 ===
                 const labelText = `${endAddr}<br><span style="font-size:12px;color:#666;">${distanceKm}公里 / ${timeMin}分钟</span>`;
                 new AMap.Marker({
                   position: route.end,
                   map: map,
+                  icon: new AMap.Icon({
+                    image: 'https://a.amap.com/jsapi_demos/static/demo-center/images/poi-marker-red.png',
+                    size: new AMap.Size(28, 40),
+                    imageSize: new AMap.Size(28, 40)
+                  }),
                   label: {
                     content: labelText,
                     direction: 'right',
