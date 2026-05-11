@@ -65,7 +65,7 @@
       list.appendChild(div);
     }
 
-    // 获取地址文本（参考前述正确的代码）
+    // 获取地址文本
     async function getAddressText(lnglat) {
       return new Promise(resolve => {
         const geocoder = new AMap.Geocoder();
@@ -73,7 +73,7 @@
           if (status === 'complete' && result && result.regeocode && result.regeocode.formattedAddress) {
             resolve(result.regeocode.formattedAddress);
           } else {
-            resolve('地址解析失败');
+            resolve(lnglat.lng + ',' + lnglat.lat); // 失败时回退显示经纬度
           }
         });
       });
@@ -87,14 +87,11 @@
       const startStr = document.getElementById('startInput').value.trim();
       if (!startStr) return alert('请输入起点');
 
-      // 解析起点经纬度
       startPoint = await getLngLat(startStr);
       if (!startPoint) return alert('起点解析失败');
 
-      // 获取起点地址文本
       startAddress = await getAddressText(startPoint);
 
-      // 解析所有目的地
       destinations = [];
       const inputs = document.querySelectorAll('#destList input');
       for (let input of inputs) {
@@ -202,20 +199,26 @@
               strokeOpacity: 0.9
             });
 
-            // 标注起点（地址文本）
+            // 起点（绿色标记 + 地址文本）
             new AMap.Marker({
               position: start,
               map: map,
-              icon: new AMap.Icon({image: 'https://a.amap.com/jsapi_demos/static/demo-center/images/poi-marker-green.png', size: new AMap.Size(28,40)}),
-              label: {content: startAddress, direction: 'top', offset: new AMap.Pixel(0, -45)}
+              icon: new AMap.Icon({
+                image: 'https://webapi.amap.com/theme/v1.3/markers/n/start.png',
+                size: new AMap.Size(30, 45)
+              }),
+              label: {content: startAddress, direction: 'top', offset: new AMap.Pixel(0, -50)}
             });
 
-            // 标注每个目的地（地址文本）
+            // 每个目的地（红色标记 + 地址文本）
             points.forEach(p => {
               new AMap.Marker({
                 position: p.lnglat,
                 map: map,
-                icon: new AMap.Icon({image: 'https://a.amap.com/jsapi_demos/static/demo-center/images/poi-marker-red.png', size: new AMap.Size(28,40)}),
+                icon: new AMap.Icon({
+                  image: 'https://webapi.amap.com/theme/v1.3/markers/n/end.png',
+                  size: new AMap.Size(30, 45)
+                }),
                 label: {content: p.address, direction: 'right', offset: new AMap.Pixel(15, 0)}
               });
             });
