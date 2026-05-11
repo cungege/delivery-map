@@ -28,7 +28,7 @@
 
   <div class="info" id="status">正在规划路线...</div>
 
-  <!-- 关键修复：安全密钥必须放在 AMap 脚本加载之前！ -->
+  <!-- 安全密钥必须放在脚本加载之前 -->
   <script type="text/javascript">
     window._AMapSecurityConfig = {
       securityJsCode: 'd1696b36a67c28cdee2466920e4bacac'
@@ -53,15 +53,21 @@
       ];
 
       let completed = 0;
+      let startLabeled = false;   // 共同起点只显示一次标签
 
       routes.forEach(route => {
         new AMap.Driving({
           map: map,
           policy: AMap.DrivingPolicy.LEAST_TIME,
-          hideMarkers: false,
+          hideMarkers: true,        // 完全移除蓝色大头针
           autoFitView: false
         }).search(route.start, route.end, (status, result) => {
           if (status === 'complete' && result.routes && result.routes.length > 0) {
+            // === 自动从高德返回数据提取地址名称 ===
+            const startName = result.origin && result.origin.name ? result.origin.name : '共同起点';
+            const endName   = result.destination && result.destination.name ? result.destination.name : route.name + ' 终点';
+
+            // 绘制路线
             const path = result.routes[0].steps.flatMap(step => step.path || []);
             const polyline = new AMap.Polyline({
               path: path,
@@ -72,8 +78,30 @@
             });
             map.add(polyline);
 
-            new AMap.Marker({ position: route.start, map: map, title: route.name + ' 起点' });
-            new AMap.Marker({ position: route.end,   map: map, title: route.name + ' 终点' });
+            // 起点标签（共同起点只显示一次）
+            if (!startLabeled) {
+              new AMap.Marker({
+                position: route.start,
+                map: map,
+                label: {
+                  content: startName,
+                  direction: 'top',
+                  offset: new AMap.Pixel(0, -40)
+                }
+              });
+              startLabeled = true;
+            }
+
+            // 终点标签（显示在图标右侧）
+            new AMap.Marker({
+              position: route.end,
+              map: map,
+              label: {
+                content: endName,
+                direction: 'right',
+                offset: new AMap.Pixel(15, 0)
+              }
+            });
 
             completed++;
             document.getElementById('status').innerHTML = `已完成 ${completed}/3 条路线`;
@@ -84,7 +112,6 @@
             }
           } else {
             console.error(`路线 ${route.name} 失败`, result);
-            document.getElementById('status').innerHTML = `⚠️ ${route.name} 规划失败`;
           }
         });
       });
