@@ -6,8 +6,12 @@
   <style>
     html,body,#map{height:100%;margin:0;padding:0;}
     .legend {
-      position: absolute; top: 20px; left: 20px; background: white; padding: 12px; border-radius: 6px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.3); z-index: 999; font-size: 14px; line-height: 1.8;
+      position: absolute; top: 20px; left: 20px; background: white; padding: 12px; border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 999; font-size: 15px; line-height: 1.8;
+    }
+    .info {
+      position: absolute; bottom: 20px; left: 20px; background: white; padding: 8px 12px; border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3); z-index: 999; font-size: 13px;
     }
   </style>
 </head>
@@ -22,6 +26,8 @@
     <span style="color:#0000FF;">● 组3（蓝色）</span>
   </div>
 
+  <div class="info" id="status">正在规划路线...</div>
+
   <!-- 高德JS API -->
   <script src="https://webapi.amap.com/maps?v=2.0&key=b5280cf1a14f4dea11bb03e25e1b72b9&plugin=AMap.Driving"></script>
   <script>
@@ -30,47 +36,64 @@
     };
 
     const map = new AMap.Map('map', {
-      zoom: 10,                                      // 初始缩放（广西区域合适）
-      center: [109.561199, 23.103332]                // 直接设为3组共同起点（广西）
+      zoom: 10,
+      center: [109.561199, 23.103332]
     });
 
-    // 3组路线数据（你的真实经纬度）
-    const routes = [
-      { name: "组1", start: [109.561199,23.103332], end: [110.190964,23.583378], color: "#FF0000" },
-      { name: "组2", start: [109.561199,23.103332], end: [109.74654,22.76897],   color: "#00FF00" },
-      { name: "组3", start: [109.561199,23.103332], end: [110.365833,23.292222], color: "#0000FF" }
-    ];
+    // 等待地图完全加载后再画路线（关键修复！）
+    map.on('complete', function() {
+      console.log('✅ 地图已完全加载，开始规划3条路线');
 
-    let completed = 0;   // 计数器：等所有路线加载完后统一适应视图
+      const routes = [
+        { name: "组1", start: [109.561199,23.103332], end: [110.190964,23.583378], color: "#FF0000" },
+        { name: "组2", start: [109.561199,23.103332], end: [109.74654,22.76897],   color: "#00FF00" },
+        { name: "组3", start: [109.561199,23.103332], end: [110.365833,23.292222], color: "#0000FF" }
+      ];
 
-    routes.forEach(route => {
-      new AMap.Driving({
-        map: map,
-        policy: AMap.DrivingPolicy.LEAST_TIME,
-        hideMarkers: false,
-        autoFitView: false   // 关闭单个自动fit，统一在最后处理
-      }).search(route.start, route.end, (status, result) => {
-        if (status === 'complete' && result.routes.length) {
-          const path = result.routes[0].steps.flatMap(step => step.path);
-          const polyline = new AMap.Polyline({
-            path: path,
-            strokeColor: route.color,
-            strokeWeight: 8,
-            strokeOpacity: 0.85,
-            lineJoin: 'round'
-          });
-          map.add(polyline);
+      let completed = 0;
 
-          // 起点终点标记
-          new AMap.Marker({ position: route.start, map: map, title: route.name + ' 起点' });
-          new AMap.Marker({ position: route.end, map: map, title: route.name + ' 终点' });
+      routes.forEach(route => {
+        new AMap.Driving({
+          map: map,
+          policy: AMap.DrivingPolicy.LEAST_TIME,
+          hideMarkers: false,
+          autoFitView: false
+        }).search(route.start, route.end, (status, result) => {
+          console.log(`路线 ${route.name} 返回状态:`, status, result);
 
-          completed++;
-          // 所有路线加载完成 → 自动缩放到完整显示3条路线
-          if (completed === routes.length) {
-            map.setFitView();   // 关键！统一适应全部路线
+          if (status === 'complete' && result.routes && result.routes.length > 0) {
+            // 提取路径
+            const path = result.routes[0].steps.flatMap(step => step.path || []);
+            
+            // 画路线
+            const polyline = new AMap.Polyline({
+              path: path,
+              strokeColor: route.color,
+              strokeWeight: 9,
+              strokeOpacity: 0.9,
+              lineJoin: 'round',
+              zIndex: 50
+            });
+            map.add(polyline);
+
+            // 起点终点标记
+            new AMap.Marker({ position: route.start, map: map, title: route.name + ' 起点', zIndex: 100 });
+            new AMap.Marker({ position: route.end,   map: map, title: route.name + ' 终点',   zIndex: 100 });
+
+            completed++;
+            document.getElementById('status').innerHTML = `已完成 ${completed}/3 条路线`;
+
+            // 所有路线画完后自动适应视野
+            if (completed === routes.length) {
+              map.setFitView();
+              document.getElementById('status').innerHTML = '✅ 3条路线规划完成！';
+              console.log('✅ 所有路线绘制完成');
+            }
+          } else {
+            console.error(`路线 ${route.name} 规划失败`, result);
+            document.getElementById('status').innerHTML = `⚠️ ${route.name} 规划失败`;
           }
-        }
+        });
       });
     });
   </script>
