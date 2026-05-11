@@ -35,7 +35,7 @@
     };
   </script>
 
-  <!-- 高德JS API（新增Geocoder插件用于逆地理编码） -->
+  <!-- 高德JS API（新增Geocoder插件） -->
   <script src="https://webapi.amap.com/maps?v=2.0&key=b5280cf1a14f4dea11bb03e25e1b72b9&plugin=AMap.Driving,AMap.Geocoder"></script>
   <script>
     const map = new AMap.Map('map', {
@@ -56,7 +56,7 @@
       let startLabeled = false;
       let startAddress = '共同起点';
 
-      // 逆地理编码函数（严格使用 $.regeocode.formatted_address）
+      // 逆地理编码（严格使用 $.regeocode.formatted_address）
       function getAddress(lnglat, callback) {
         const geocoder = new AMap.Geocoder();
         geocoder.getAddress(lnglat, (status, result) => {
@@ -76,13 +76,13 @@
           new AMap.Driving({
             map: map,
             policy: AMap.DrivingPolicy.LEAST_TIME,
-            hideMarkers: true,        // ← 彻底移除浅蓝色图钉
+            hideMarkers: true,        // ← 彻底移除蓝色图钉
             autoFitView: false
           }).search(route.start, route.end, (status, result) => {
             if (status === 'complete' && result.routes && result.routes.length > 0) {
               const drivingRoute = result.routes[0];
               const distanceKm = (drivingRoute.distance / 1000).toFixed(1);
-              const timeHour = (drivingRoute.time / 3600).toFixed(1);   // 转换为小时（h）
+              const timeHour = (drivingRoute.time / 3600).toFixed(1);
 
               // 获取终点地址
               getAddress(route.end, (endAddr) => {
@@ -97,7 +97,20 @@
                 });
                 map.add(polyline);
 
-                // 共同起点标签（只显示一次）
+                // === 保留你指定的起点/终点Marker + title ===
+                new AMap.Marker({ 
+                  position: route.start, 
+                  map: map, 
+                  title: route.name + ' 起点' 
+                });
+
+                new AMap.Marker({ 
+                  position: route.end, 
+                  map: map, 
+                  title: route.name + ' 终点' 
+                });
+
+                // 共同起点地址标注（只显示一次）
                 if (!startLabeled) {
                   new AMap.Marker({
                     position: route.start,
@@ -111,7 +124,7 @@
                   startLabeled = true;
                 }
 
-                // 终点标签（地址 + 距离 + 用时）
+                // 终点地址 + 距离 + 用时标注
                 const labelText = `${endAddr}<br><span style="font-size:12px;color:#666;">${distanceKm}KM / ${timeHour}h</span>`;
                 new AMap.Marker({
                   position: route.end,
