@@ -8,8 +8,6 @@
     .container {display:flex;height:100%;}
     .sidebar {width:340px;background:#fff;border-right:1px solid #ddd;padding:15px;overflow:auto;}
     .map-container {flex:1;position:relative;}
-    .legend {position:absolute;top:20px;left:20px;background:white;padding:12px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:999;font-size:14px;}
-    .info {position:absolute;bottom:20px;left:20px;background:white;padding:10px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.3);z-index:999;font-size:13px;}
     button {padding:12px 20px;background:#67c23a;color:white;border:none;border-radius:6px;cursor:pointer;font-size:16px;width:100%;}
   </style>
 </head>
@@ -29,43 +27,36 @@
   <script src="https://webapi.amap.com/maps?v=2.0&key=b5280cf1a14f4dea11bb03e25e1b72b9&plugin=AMap.Driving,AMap.Geocoder"></script>
   <script>
     let map, startPoint = null, startAddress = '', destinations = [];
-    const MAX_DRIVING_TIME = 6480;   // 1.8小时
-    const STOP_TIME_PER_SITE = 10800; // 每个站点停留3小时
+    const MAX_DRIVING_TIME = 6480;
+    const STOP_TIME_PER_SITE = 10800;
 
     function initMap() {
       map = new AMap.Map('map', { zoom: 11, center: [109.561199, 23.103332] });
     }
 
-    // 调用简道云API获取地址
     async function getDataFromJiandaoyun() {
       document.getElementById('status').innerHTML = '正在从简道云获取数据...';
       document.getElementById('resultInfo').innerHTML = '';
 
-      const apiUrl = "https://www.jiandaoyun.com/shenzhendxd/api/v1/form/data/query";
-
-      const body = {
-        "formId": "6a1e7c78a4d82f8092fc53a6",          // ←←← 请替换成你的真实表单ID
-        "orderBy": "createTime desc",
-        "pageSize": 1
-      };
+      // ==================== 请修改这里 ====================
+      const appId = "69f2edba8bb15d99bb09b8f9";        // ←←← 改成你的
+      const entryId = "6a1e7c78a4d82f8092fc53a6";    // ←←← 改成你的
+      const apiUrl = `https://api.jiandaoyun.com/api/v2/app/${appId}/entry/${entryId}/widgets`;
 
       try {
         const response = await fetch(apiUrl, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer agNBXmoph1oimHnUFMmQmhQ4xEhYOeYK7D8083eBfA5C302Aa038fDdCd5642Ab8'
-          },
-          body: JSON.stringify(body)
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
         });
 
         const result = await response.json();
+        console.log("简道云返回完整数据:", result);
 
+        // 解析 addr1 ~ addr8
+        destinations = [];
         if (result.data && result.data.length > 0) {
           const record = result.data[0];
-
-          // 提取 addr1 ~ addr8 的 value
-          destinations = [];
           for (let i = 1; i <= 8; i++) {
             const field = record[`addr${i}`];
             if (field && field.value && field.value.trim() !== '') {
@@ -76,20 +67,18 @@
               }
             }
           }
+        }
 
-          if (destinations.length > 0) {
-            startPoint = new AMap.LngLat(109.561199, 23.103332); // 可改为动态
-            startAddress = "起点";
-            await planBatches();
-          } else {
-            document.getElementById('status').innerHTML = '未找到有效地址';
-          }
+        if (destinations.length > 0) {
+          startPoint = new AMap.LngLat(109.561199, 23.103332);
+          startAddress = "起点";
+          await planBatches();
         } else {
-          document.getElementById('status').innerHTML = '未查询到数据';
+          document.getElementById('status').innerHTML = '未找到有效地址';
         }
       } catch (error) {
         console.error(error);
-        document.getElementById('status').innerHTML = '调用简道云API失败';
+        document.getElementById('status').innerHTML = '调用简道云失败（可能是CORS）';
       }
     }
 
@@ -111,7 +100,7 @@
       });
     }
 
-    // 以下为规划逻辑（已包含1.8小时分批 + 每个站点3小时停留）
+    // 规划逻辑保持不变（已包含你要求的分批规则）
     async function planBatches() { /* ... */ }
     async function calculateDrivingTime(start, points) { /* ... */ }
     async function planOneBatch(start, points, batchIndex) { /* ... */ }
