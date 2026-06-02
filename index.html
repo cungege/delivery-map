@@ -25,31 +25,31 @@
     </div>
   </div>
 
-<!-- 必须在加载地图脚本之前设置安全密钥 -->
+  <!-- 高德地图安全配置（必须放在脚本之前） -->
   <script>
     window._AMapSecurityConfig = {
-      securityJsCode: 'd1696b36a67c28cdee2466920e4bacac'   // ←←← 必须修改
+      securityJsCode: 'd1696b36a67c28cdee2466920e4bacac'
     }
   </script>
   
   <script src="https://webapi.amap.com/maps?v=2.0&key=b5280cf1a14f4dea11bb03e25e1b72b9&plugin=AMap.Driving,AMap.Geocoder"></script>
+
   <script>
     let map, startPoint = null, startAddress = '', destinations = [];
-    const MAX_DRIVING_TIME = 6480;   // 1.8小时
-    const STOP_TIME_PER_SITE = 10800; // 每个站点停留3小时
+    const MAX_DRIVING_TIME = 6480;
+    const STOP_TIME_PER_SITE = 10800;
 
     function initMap() {
       map = new AMap.Map('map', { zoom: 11, center: [109.561199, 23.103332] });
     }
 
-    // ==================== 调用简道云（通过 Vercel Proxy） ====================
     async function getDataFromJiandaoyun() {
       document.getElementById('status').innerHTML = '正在从简道云获取数据...';
       document.getElementById('resultInfo').innerHTML = '';
 
-      const VERCEL_PROXY_URL = "https://jiandaoyun-proxy.vercel.app/api/proxy"; // ←←← 改成你的 Vercel 地址
-      const APP_ID = "69f2edba8bb15d99bb09b8f9";   // ←←← 改成你的
-      const ENTRY_ID = "6a1e7c78a4d82f8092fc53a6";   // ←←← 改成你的
+      const VERCEL_PROXY_URL = "https://jiandaoyun-proxy.vercel.app/api/proxy";
+      const APP_ID = "69f2edba8bb15d99bb09b8f9";
+      const ENTRY_ID = "6a1e7c78a4d82f8092fc53a6";
 
       try {
         const response = await fetch(VERCEL_PROXY_URL, {
@@ -64,6 +64,12 @@
         const result = await response.json();
         console.log("简道云返回完整数据:", result);
 
+        if (result.error) {
+          document.getElementById('status').innerHTML = '简道云返回错误: ' + result.error;
+          console.error(result);
+          return;
+        }
+
         if (!result.data || result.data.length === 0) {
           document.getElementById('status').innerHTML = '简道云未返回数据';
           return;
@@ -71,17 +77,13 @@
 
         const record = result.data[0];
 
-        // 解析 addr1 ~ addr8（坐标格式：经度,纬度）
         destinations = [];
         for (let i = 1; i <= 8; i++) {
           const coordStr = record[`addr${i}`];
           if (coordStr && coordStr.trim() !== '') {
             const lnglat = await getLngLat(coordStr);
             if (lnglat) {
-              destinations.push({
-                lnglat: lnglat,
-                address: coordStr
-              });
+              destinations.push({ lnglat: lnglat, address: coordStr });
             }
           }
         }
@@ -98,7 +100,7 @@
 
       } catch (error) {
         console.error(error);
-        document.getElementById('status').innerHTML = '调用失败';
+        document.getElementById('status').innerHTML = '调用简道云失败（fetch failed）';
       }
     }
 
@@ -120,7 +122,6 @@
       });
     }
 
-    // ==================== 路线规划逻辑（保留你之前的要求） ====================
     async function planBatches() {
       let batch = [], batchIndex = 1, allRoutes = [];
 
@@ -174,7 +175,6 @@
               strokeOpacity: 0.9
             });
 
-            // 起点
             new AMap.Marker({
               position: start,
               map: map,
@@ -182,7 +182,6 @@
               label: { content: startAddress, direction: 'top', offset: new AMap.Pixel(0, -50) }
             });
 
-            // 每个目的地
             points.forEach(p => {
               new AMap.Marker({
                 position: p.lnglat,
