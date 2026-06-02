@@ -7,7 +7,9 @@
     html,body,#map{height:100%;margin:0;padding:0;font-family:Microsoft Yahei,sans-serif;}
     .container {display:flex;height:100%;}
     .sidebar {width:340px;background:#fff;border-right:1px solid #ddd;padding:15px;overflow:auto;}
+    .map-container {flex:1;position:relative;}
     button {padding:12px 20px;background:#67c23a;color:white;border:none;border-radius:6px;cursor:pointer;font-size:16px;width:100%;}
+    .route-batch {margin-bottom:12px;padding:8px;background:#f8f9fa;border-radius:6px;border-left:4px solid #67c23a;}
   </style>
 </head>
 <body>
@@ -26,62 +28,72 @@
   <script src="https://webapi.amap.com/maps?v=2.0&key=b5280cf1a14f4dea11bb03e25e1b72b9&plugin=AMap.Driving,AMap.Geocoder"></script>
   <script>
     let map, startPoint = null, startAddress = '', destinations = [];
-    const MAX_DRIVING_TIME = 6480;
-    const STOP_TIME_PER_SITE = 10800;
+    const MAX_DRIVING_TIME = 6480;   // 1.8小时
+    const STOP_TIME_PER_SITE = 10800; // 每个站点停留3小时
 
     function initMap() {
       map = new AMap.Map('map', { zoom: 11, center: [109.561199, 23.103332] });
     }
 
-async function getDataFromJiandaoyun() {
-  document.getElementById('status').innerHTML = '正在从简道云获取数据...';
-  document.getElementById('resultInfo').innerHTML = '';
+    // ==================== 调用简道云（通过 Vercel Proxy） ====================
+    async function getDataFromJiandaoyun() {
+      document.getElementById('status').innerHTML = '正在从简道云获取数据...';
+      document.getElementById('resultInfo').innerHTML = '';
 
-  const VERCEL_PROXY_URL = "https://jiandaoyun-proxy.vercel.app/api/proxy"; // ← 改成你的
-  const APP_ID = "69f2edba8bb15d99bb09b8f9";      // ← 改成你的
-  const ENTRY_ID = "6a1e7c78a4d82f8092fc53a6";  // ← 改成你的
+      const VERCEL_PROXY_URL = "https://jiandaoyun-proxy.vercel.app/api/proxy"; // ←←← 改成你的 Vercel 地址
+      const APP_ID = "69f2edba8bb15d99bb09b8f9";   // ←←← 改成你的
+      const ENTRY_ID = "6a1e7c78a4d82f8092fc53a6";   // ←←← 改成你的
 
-  try {
-    const response = await fetch(VERCEL_PROXY_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        app_id: APP_ID,
-        entry_id: ENTRY_ID
-      })
-    });
+      try {
+        const response = await fetch(VERCEL_PROXY_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            app_id: APP_ID,
+            entry_id: ENTRY_ID
+          })
+        });
 
-    const result = await response.json();
-    console.log("简道云返回数据:", result);
+        const result = await response.json();
+        console.log("简道云返回完整数据:", result);
 
-    // 解析 addr1 ~ addr8
-    destinations = [];
-    if (result.data && result.data.length > 0) {
-      const record = result.data[0];
-      for (let i = 1; i <= 8; i++) {
-        const field = record[`addr${i}`];
-        if (field && field.value && field.value.trim() !== '') {
-          const address = field.value.trim();
-          const lnglat = await getLngLat(address);
-          if (lnglat) {
-            destinations.push({ lnglat: lnglat, address: address });
+        if (!result.data || result.data.length === 0) {
+          document.getElementById('status').innerHTML = '简道云未返回数据';
+          return;
+        }
+
+        const record = result.data[0];
+
+        // 解析 addr1 ~ addr8（坐标格式：经度,纬度）
+        destinations = [];
+        for (let i = 1; i <= 8; i++) {
+          const coordStr = record[`addr${i}`];
+          if (coordStr && coordStr.trim() !== '') {
+            const lnglat = await getLngLat(coordStr);
+            if (lnglat) {
+              destinations.push({
+                lnglat: lnglat,
+                address: coordStr
+              });
+            }
           }
         }
+
+        if (destinations.length === 0) {
+          document.getElementById('status').innerHTML = '未解析到有效地址';
+          return;
+        }
+
+        startPoint = new AMap.LngLat(109.561199, 23.103332);
+        startAddress = "起点";
+
+        await planBatches();
+
+      } catch (error) {
+        console.error(error);
+        document.getElementById('status').innerHTML = '调用失败';
       }
     }
-
-    if (destinations.length > 0) {
-      startPoint = new AMap.LngLat(109.561199, 23.103332);
-      startAddress = "起点";
-      await planBatches();
-    } else {
-      document.getElementById('status').innerHTML = '未找到有效地址';
-    }
-  } catch (error) {
-    console.error(error);
-    document.getElementById('status').innerHTML = '调用失败';
-  }
-}
 
     async function getLngLat(str) {
       return new Promise(resolve => {
@@ -101,12 +113,117 @@ async function getDataFromJiandaoyun() {
       });
     }
 
-    // 以下规划逻辑保持不变（已包含你要求的分批规则）
-    async function planBatches() { /* ... */ }
-    async function calculateDrivingTime(start, points) { /* ... */ }
-    async function planOneBatch(start, points, batchIndex) { /* ... */ }
-    function getBatchColor(index) { /* ... */ }
-    function showAllBatches(routes) { /* ... */ }
+    // ==================== 路线规划逻辑（保留你之前的要求） ====================
+    async function planBatches() {
+      let batch = [], batchIndex = 1, allRoutes = [];
+
+      for (let i = 0; i < destinations.length; i++) {
+        const tempBatch = [...batch, destinations[i]];
+        const drivingTime = await calculateDrivingTime(startPoint, tempBatch);
+
+        if ((drivingTime > MAX_DRIVING_TIME || tempBatch.length > 2) && batch.length > 0) {
+          const route = await planOneBatch(startPoint, batch, batchIndex);
+          allRoutes.push(route);
+          batchIndex++;
+          batch = [destinations[i]];
+        } else {
+          batch = tempBatch;
+        }
+      }
+
+      if (batch.length > 0) {
+        const route = await planOneBatch(startPoint, batch, batchIndex);
+        allRoutes.push(route);
+      }
+
+      showAllBatches(allRoutes);
+    }
+
+    async function calculateDrivingTime(start, points) {
+      return new Promise(resolve => {
+        const driving = new AMap.Driving({ policy: AMap.DrivingPolicy.LEAST_TIME });
+        const waypoints = points.map(p => p.lnglat);
+        driving.search(start, waypoints[waypoints.length - 1], { waypoints: waypoints.slice(0, -1) }, (status, result) => {
+          resolve(status === 'complete' && result.routes.length ? result.routes[0].time : 999999);
+        });
+      });
+    }
+
+    async function planOneBatch(start, points, batchIndex) {
+      return new Promise(resolve => {
+        const driving = new AMap.Driving({ policy: AMap.DrivingPolicy.LEAST_TIME, hideMarkers: true });
+        const waypoints = points.map(p => p.lnglat);
+
+        driving.search(start, waypoints[waypoints.length - 1], { waypoints: waypoints.slice(0, -1) }, (status, result) => {
+          if (status === 'complete' && result.routes.length) {
+            const route = result.routes[0];
+            const path = route.steps.flatMap(step => step.path || []);
+
+            new AMap.Polyline({
+              map: map,
+              path: path,
+              strokeColor: getBatchColor(batchIndex),
+              strokeWeight: 8,
+              strokeOpacity: 0.9
+            });
+
+            // 起点
+            new AMap.Marker({
+              position: start,
+              map: map,
+              icon: new AMap.Icon({ image: 'https://webapi.amap.com/theme/v1.3/markers/n/start.png', size: new AMap.Size(30, 45) }),
+              label: { content: startAddress, direction: 'top', offset: new AMap.Pixel(0, -50) }
+            });
+
+            // 每个目的地
+            points.forEach(p => {
+              new AMap.Marker({
+                position: p.lnglat,
+                map: map,
+                icon: new AMap.Icon({ image: 'https://webapi.amap.com/theme/v1.3/markers/n/end.png', size: new AMap.Size(30, 45) }),
+                label: { content: p.address, direction: 'right', offset: new AMap.Pixel(15, 0) }
+              });
+            });
+
+            resolve({ time: route.time, distance: route.distance, points: points, batchIndex });
+          }
+        });
+      });
+    }
+
+    function getBatchColor(index) {
+      const colors = ['#FF0000', '#00FF00', '#0000FF', '#FF00FF', '#00FFFF'];
+      return colors[(index - 1) % colors.length];
+    }
+
+    function showAllBatches(routes) {
+      let html = `<h4>规划结果（共 ${routes.length} 批次）</h4>`;
+      let totalTime = 0;
+
+      routes.forEach(r => {
+        const drivingHours = (r.time / 3600).toFixed(1);
+        const stopHours = (r.points.length * 3).toFixed(1);
+        const batchTotalHours = (r.time / 3600 + r.points.length * 3).toFixed(1);
+        totalTime += r.time + r.points.length * 10800;
+
+        html += `
+          <div class="route-batch">
+            <strong>第${r.batchIndex}批次</strong>：${r.points.length}个目的地<br>
+            行驶时间：${drivingHours}小时<br>
+            停留时间：${stopHours}小时（每个站点3小时）<br>
+            <strong>本批次总计：${batchTotalHours}小时</strong><br>
+            目的地：${r.points.map(p => p.address).join(' → ')}
+          </div>`;
+      });
+
+      const totalHours = (totalTime / 3600).toFixed(1);
+      html += `<div style="margin-top:15px;padding:10px;background:#f0f0f0;border-radius:6px;">
+                 <strong>所有批次总计用时：</strong>${totalHours}小时
+               </div>`;
+
+      document.getElementById('resultInfo').innerHTML = html;
+      document.getElementById('status').innerHTML = '✅ 规划完成！';
+    }
 
     window.onload = function() {
       initMap();
