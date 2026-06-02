@@ -37,9 +37,9 @@ async function getDataFromJiandaoyun() {
   document.getElementById('status').innerHTML = '正在从简道云获取数据...';
   document.getElementById('resultInfo').innerHTML = '';
 
-  const VERCEL_PROXY_URL = "https://你的项目名.vercel.app/api/proxy"; // ← 改成你的
-  const APP_ID = "你的app_id";      // ← 改成你的
-  const ENTRY_ID = "你的entry_id";  // ← 改成你的
+  const VERCEL_PROXY_URL = "https://jiandaoyun-proxy.vercel.app/api/proxy"; // ← 改成你的
+  const APP_ID = "69f2edba8bb15d99bb09b8f9";      // ← 改成你的
+  const ENTRY_ID = "6a1e7c78a4d82f8092fc53a6";  // ← 改成你的
 
   try {
     const response = await fetch(VERCEL_PROXY_URL, {
