@@ -7,7 +7,6 @@
     html,body,#map{height:100%;margin:0;padding:0;font-family:Microsoft Yahei,sans-serif;}
     .container {display:flex;height:100%;}
     .sidebar {width:340px;background:#fff;border-right:1px solid #ddd;padding:15px;overflow:auto;}
-    .map-container {flex:1;position:relative;}
     button {padding:12px 20px;background:#67c23a;color:white;border:none;border-radius:6px;cursor:pointer;font-size:16px;width:100%;}
   </style>
 </head>
@@ -38,20 +37,24 @@
       document.getElementById('status').innerHTML = '正在从简道云获取数据...';
       document.getElementById('resultInfo').innerHTML = '';
 
-      // ==================== 请修改这里 ====================
-      const appId = "69f2edba8bb15d99bb09b8f9";        // ←←← 改成你的
-      const entryId = "6a1e7c78a4d82f8092fc53a6";    // ←←← 改成你的
-      const apiUrl = `https://api.jiandaoyun.com/api/v2/app/${appId}/entry/${entryId}/widgets`;
+      // ==================== 请修改下面两行 ====================
+      const VERCEL_PROXY_URL = "https://jiandaoyun-proxy.vercel.app/api/proxy";   // ←←← 改成你 Vercel 的地址
+      const APP_ID = "你的app_id";        // ←←← 改成你的
+      const ENTRY_ID = "你的entry_id";    // ←←← 改成你的
+      // =====================================================
 
       try {
-        const response = await fetch(apiUrl, {
+        const response = await fetch(VERCEL_PROXY_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({})
+          body: JSON.stringify({
+            app_id: APP_ID,
+            entry_id: ENTRY_ID
+          })
         });
 
         const result = await response.json();
-        console.log("简道云返回完整数据:", result);
+        console.log("简道云返回数据:", result);
 
         // 解析 addr1 ~ addr8
         destinations = [];
@@ -78,7 +81,7 @@
         }
       } catch (error) {
         console.error(error);
-        document.getElementById('status').innerHTML = '调用简道云失败（可能是CORS）';
+        document.getElementById('status').innerHTML = '调用失败';
       }
     }
 
@@ -100,7 +103,7 @@
       });
     }
 
-    // 规划逻辑保持不变（已包含你要求的分批规则）
+    // 以下规划逻辑保持不变（已包含你要求的分批规则）
     async function planBatches() { /* ... */ }
     async function calculateDrivingTime(start, points) { /* ... */ }
     async function planOneBatch(start, points, batchIndex) { /* ... */ }
