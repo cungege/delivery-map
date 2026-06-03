@@ -68,6 +68,7 @@
       <h3>智能配送规划</h3>
       <button onclick="getDataFromJiandaoyun()">📡 获取简道云路线</button>
       
+      <!-- 新增车队GPS监控按钮 -->
       <button onclick="startFleetMonitoring()" style="background:#409eff;">🚚 开始车队GPS监控</button>
       <button onclick="stopFleetMonitoring()" style="background:#f56c6c;">⏹ 停止监控</button>
 
@@ -134,6 +135,7 @@
       }
     }
 
+    // ==================== 获取简道云数据并规划 ====================
     async function getDataFromJiandaoyun() {
       document.getElementById('status').innerHTML = '正在从简道云获取数据...';
       document.getElementById('resultInfo').innerHTML = '';
@@ -296,7 +298,7 @@
       document.getElementById('status').innerHTML = '✅ 规划完成！';
     }
 
-    // ==================== 回写简道云 ====================
+    // ==================== 回写简道云（记录本次规划批次ID） ====================
     async function writePlanResultToJiandaoyun() {
       const VERCEL_PROXY_URL = "https://jiandaoyun-proxy.vercel.app/api/proxy";
       const WRITE_APP_ID = "69f2edba8bb15d99bb09b8f9";
@@ -352,14 +354,14 @@
           });
         }
 
-        alert(`成功回写 ${writeList.length} 个批次！已记录 ${currentPlannedBatchIds.length} 个批次ID`);
+        alert(`成功回写 ${writeList.length} 个批次！已记录 ${currentPlannedBatchIds.length} 个批次ID用于监控`);
       } catch (err) {
         console.error(err);
         alert("回写简道云失败");
       }
     }
 
-    // ==================== 车队GPS监控（变量只使用，不再重复声明） ====================
+    // ==================== 车队GPS监控（只监控本次规划批次） ====================
     function clearVehicleMarkers() {
       vehicleMarkers.forEach(m => m.setMap(null));
       vehicleMarkers = [];
@@ -399,12 +401,11 @@
           const gpsList = record.gps_sub_table || [];
           if (gpsList.length === 0) return;
 
-          // TODO: 根据你实际子表单字段名修改下面两行
           const latest = gpsList[gpsList.length - 1];
-          const lng = latest.gps_lng || latest.lng;
-          const lat = latest.gps_lat || latest.lat;
+          const lng = parseFloat(latest.gps_lng);
+          const lat = parseFloat(latest.gps_lat);
 
-          if (!lng || !lat) return;
+          if (!lng || !lat || isNaN(lng) || isNaN(lat)) return;
 
           const leaderName = record.team_leader && record.team_leader.value 
             ? record.team_leader.value 
