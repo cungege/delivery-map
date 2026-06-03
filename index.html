@@ -24,11 +24,13 @@
     </div>
   </div>
 
+  <!-- 高德安全配置必须在地图脚本之前 -->
   <script>
     window._AMapSecurityConfig = {
       securityJsCode: 'd1696b36a67c28cdee2466920e4bacac'
     }
   </script>
+  
   <script src="https://webapi.amap.com/maps?v=2.0&key=b5280cf1a14f4dea11bb03e25e1b72b9&plugin=AMap.Driving,AMap.Geocoder"></script>
 
   <script>
@@ -56,7 +58,7 @@
         });
 
         const result = await response.json();
-        console.log("简道云返回数据:", result);
+        console.log("简道云返回完整数据:", result);
 
         if (!result.data || result.data.length === 0) {
           document.getElementById('status').innerHTML = '简道云未返回数据';
@@ -202,7 +204,7 @@
       document.getElementById('status').innerHTML = '✅ 规划完成！';
     }
 
-    // ==================== 回写简道云（严格按照你提供的字段） ====================
+    // ==================== 回写简道云（已修正字段名） ====================
     async function writePlanResultToJiandaoyun() {
       const VERCEL_PROXY_URL = "https://jiandaoyun-proxy.vercel.app/api/proxy";
       const WRITE_APP_ID = "69f2edba8bb15d99bb09b8f9";
@@ -224,13 +226,13 @@
             "date": new Date().toISOString(),
             "batch_id": `批次${route.batchIndex}`,
             "status": "待出发",
-            "team_leader": "",                    // 后续在简道云指派
+            "team_leader": "",
             "start_addr": "109.561199,23.103332",
             "target_addr1": dest1,
             "target_addr2": dest2,
             "total_time": parseFloat(totalTime.toFixed(1)),
             "total_dest": parseFloat(totalDistance.toFixed(1)),
-            "gps_sub_table": []                    // GPS轨迹明细子表单（初始为空）
+            "gps_sub_table": []
           }
         });
       }
