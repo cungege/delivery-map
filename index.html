@@ -68,7 +68,6 @@
       <h3>智能配送规划</h3>
       <button onclick="getDataFromJiandaoyun()">📡 获取简道云路线</button>
       
-      <!-- 新增车队GPS监控按钮 -->
       <button onclick="startFleetMonitoring()" style="background:#409eff;">🚚 开始车队GPS监控</button>
       <button onclick="stopFleetMonitoring()" style="background:#f56c6c;">⏹ 停止监控</button>
 
@@ -90,11 +89,11 @@
   <script src="https://webapi.amap.com/maps?v=2.0&key=b5280cf1a14f4dea11bb03e25e1b72b9&plugin=AMap.Driving,AMap.Geocoder"></script>
 
   <script>
-    // ==================== 全局变量 ====================
+    // ==================== 全局变量（只声明一次） ====================
     let map, startPoint = null, startAddress = '', destinations = [], allRoutes = [];
     let monitoringInterval = null;
     let vehicleMarkers = [];
-    let currentPlannedBatchIds = [];           // 记录本次规划生成的批次ID
+    let currentPlannedBatchIds = [];
     const MAX_DRIVING_TIME = 6480;
     const STOP_TIME_PER_SITE = 10800;
 
@@ -135,7 +134,6 @@
       }
     }
 
-    // ==================== 获取简道云数据 + 规划 + 回写 ====================
     async function getDataFromJiandaoyun() {
       document.getElementById('status').innerHTML = '正在从简道云获取数据...';
       document.getElementById('resultInfo').innerHTML = '';
@@ -298,7 +296,7 @@
       document.getElementById('status').innerHTML = '✅ 规划完成！';
     }
 
-    // ==================== 回写简道云（记录本次规划的批次ID） ====================
+    // ==================== 回写简道云 ====================
     async function writePlanResultToJiandaoyun() {
       const VERCEL_PROXY_URL = "https://jiandaoyun-proxy.vercel.app/api/proxy";
       const WRITE_APP_ID = "69f2edba8bb15d99bb09b8f9";
@@ -344,7 +342,7 @@
         const result = await res.json();
         console.log("回写简道云结果:", result);
 
-        // ==================== 记录本次规划生成的批次ID ====================
+        // 记录本次规划生成的批次ID
         currentPlannedBatchIds = [];
         if (result.results && Array.isArray(result.results)) {
           result.results.forEach(item => {
@@ -354,17 +352,14 @@
           });
         }
 
-        alert(`成功回写 ${writeList.length} 个批次！已记录 ${currentPlannedBatchIds.length} 个批次ID用于监控`);
+        alert(`成功回写 ${writeList.length} 个批次！已记录 ${currentPlannedBatchIds.length} 个批次ID`);
       } catch (err) {
         console.error(err);
         alert("回写简道云失败");
       }
     }
 
-    // ==================== 只监控本次规划的批次 ====================
-    let monitoringInterval = null;
-    let vehicleMarkers = [];
-
+    // ==================== 车队GPS监控（变量只使用，不再重复声明） ====================
     function clearVehicleMarkers() {
       vehicleMarkers.forEach(m => m.setMap(null));
       vehicleMarkers = [];
@@ -396,7 +391,6 @@
 
         clearVehicleMarkers();
 
-        // 只保留本次规划的批次
         const targetBatches = result.data.filter(record => 
           currentPlannedBatchIds.includes(record._id)
         );
