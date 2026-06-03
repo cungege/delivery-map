@@ -402,6 +402,7 @@
           if (gpsList.length === 0) return;
 
           const latest = gpsList[gpsList.length - 1];
+          console.log("最新 GPS 数据 latest 对象:", latest);   // ← 新增这行
           const lng = parseFloat(latest.gps_lng);
           const lat = parseFloat(latest.gps_lat);
 
