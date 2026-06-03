@@ -309,16 +309,17 @@
       app_id: WRITE_APP_ID,
       entry_id: WRITE_ENTRY_ID,
       data: {
-        "date": {
-          "value": new Date().toISOString()
-        },
-        "status": {
-          "value": "待出发"
-        },
-        "start_addr": {
-          "value": "109.561199,23.103332"
-        },
-      }
+            "date": { "value": new Date().toISOString() },
+            "batch_id": { "value": `批次${route.batchIndex}` },
+            "status": { "value": "待出发" },
+            "team_leader": { "value": "" },
+            "start_addr": { "value": "109.561199,23.103332" },
+            "target_addr1": { "value": dest1 },
+            "target_addr2": { "value": dest2 },
+            "total_time": { "value": parseFloat(totalTime.toFixed(1)) },
+            "total_dest": { "value": parseFloat(totalDistance.toFixed(1)) },
+            "gps_sub_table": { "value": [] }
+          }
     });
   }
 
