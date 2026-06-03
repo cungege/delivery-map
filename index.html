@@ -4,11 +4,61 @@
   <meta charset="utf-8">
   <title>智能配送路线规划 - 高德地图</title>
   <style>
-    html,body,#map{height:100%;margin:0;padding:0;font-family:Microsoft Yahei,sans-serif;}
-    .container {display:flex;height:100%;}
-    .sidebar {width:340px;background:#fff;border-right:1px solid #ddd;padding:15px;overflow:auto;}
-    button {padding:12px 20px;background:#67c23a;color:white;border:none;border-radius:6px;cursor:pointer;font-size:16px;width:100%;}
-    .route-batch {margin-bottom:12px;padding:8px;background:#f8f9fa;border-radius:6px;border-left:4px solid #67c23a;}
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      font-family: Microsoft Yahei, sans-serif;
+    }
+    
+    .container {
+      display: flex;
+      height: 100vh;
+      width: 100%;
+    }
+    
+    .sidebar {
+      width: 340px;
+      background: #fff;
+      border-right: 1px solid #ddd;
+      padding: 15px;
+      overflow: auto;
+      flex-shrink: 0;
+    }
+    
+    .map-container {
+      flex: 1;
+      position: relative;
+      height: 100%;
+      min-height: 0;
+    }
+    
+    #map {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+    
+    button {
+      padding: 12px 20px;
+      background: #67c23a;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+      width: 100%;
+    }
+    
+    .route-batch {
+      margin-bottom: 12px;
+      padding: 8px;
+      background: #f8f9fa;
+      border-radius: 6px;
+      border-left: 4px solid #67c23a;
+    }
   </style>
 </head>
 <body>
@@ -24,7 +74,7 @@
     </div>
   </div>
 
-  <!-- 高德安全配置必须在地图脚本之前 -->
+  <!-- 高德安全配置 -->
   <script>
     window._AMapSecurityConfig = {
       securityJsCode: 'd1696b36a67c28cdee2466920e4bacac'
@@ -39,7 +89,42 @@
     const STOP_TIME_PER_SITE = 10800;
 
     function initMap() {
-      map = new AMap.Map('map', { zoom: 11, center: [109.561199, 23.103332] });
+      const mapContainer = document.getElementById('map');
+      
+      if (!mapContainer) {
+        console.error('地图容器不存在');
+        return;
+      }
+
+      if (typeof AMap === 'undefined') {
+        console.error('AMap 未加载');
+        document.getElementById('status').innerHTML = '高德地图加载失败';
+        return;
+      }
+
+      try {
+        map = new AMap.Map('map', {
+          zoom: 11,
+          center: [109.561199, 23.103332],
+          resizeEnable: true,
+          viewMode: '2D'
+        });
+
+        // 延迟执行 resize，解决容器尺寸问题
+        setTimeout(() => {
+          if (map) {
+            map.resize();
+            console.log('✅ 地图 resize 完成，加载完整');
+          }
+        }, 400);
+
+        console.log('✅ 地图初始化成功');
+        document.getElementById('status').innerHTML = '地图加载成功';
+
+      } catch (e) {
+        console.error('地图初始化异常:', e);
+        document.getElementById('status').innerHTML = '地图初始化失败';
+      }
     }
 
     async function getDataFromJiandaoyun() {
@@ -204,7 +289,7 @@
       document.getElementById('status').innerHTML = '✅ 规划完成！';
     }
 
-    // ==================== 回写简道云（已修正字段名） ====================
+    // ==================== 回写简道云 ====================
     async function writePlanResultToJiandaoyun() {
       const VERCEL_PROXY_URL = "https://jiandaoyun-proxy.vercel.app/api/proxy";
       const WRITE_APP_ID = "69f2edba8bb15d99bb09b8f9";
