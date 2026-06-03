@@ -4,61 +4,13 @@
   <meta charset="utf-8">
   <title>智能配送路线规划 - 高德地图</title>
   <style>
-    html, body {
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      font-family: Microsoft Yahei, sans-serif;
-    }
-    
-    .container {
-      display: flex;
-      height: 100vh;
-      width: 100%;
-    }
-    
-    .sidebar {
-      width: 340px;
-      background: #fff;
-      border-right: 1px solid #ddd;
-      padding: 15px;
-      overflow: auto;
-      flex-shrink: 0;
-    }
-    
-    .map-container {
-      flex: 1;
-      position: relative;
-      height: 100%;
-      min-height: 0;
-    }
-    
-    #map {
-      width: 100%;
-      height: 100%;
-      position: absolute;
-      top: 0;
-      left: 0;
-    }
-    
-    button {
-      padding: 12px 20px;
-      background: #67c23a;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 16px;
-      width: 100%;
-    }
-    
-    .route-batch {
-      margin-bottom: 12px;
-      padding: 8px;
-      background: #f8f9fa;
-      border-radius: 6px;
-      border-left: 4px solid #67c23a;
-    }
+    html, body { height: 100%; margin: 0; padding: 0; font-family: Microsoft Yahei, sans-serif; }
+    .container { display: flex; height: 100vh; width: 100%; }
+    .sidebar { width: 340px; background: #fff; border-right: 1px solid #ddd; padding: 15px; overflow: auto; flex-shrink: 0; }
+    .map-container { flex: 1; position: relative; height: 100%; min-height: 0; }
+    #map { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
+    button { padding: 10px 16px; margin-top: 8px; background: #67c23a; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; width: 100%; }
+    .route-batch { margin-bottom: 10px; padding: 8px; background: #f8f9fa; border-radius: 6px; border-left: 4px solid #67c23a; font-size: 13px; }
   </style>
 </head>
 <body>
@@ -66,6 +18,11 @@
     <div class="sidebar">
       <h3>智能配送规划</h3>
       <button onclick="getDataFromJiandaoyun()">📡 获取简道云路线</button>
+      
+      <!-- 新增车队监控按钮 -->
+      <button onclick="startFleetMonitoring()" style="background:#409eff;">🚚 开始车队GPS监控</button>
+      <button onclick="stopFleetMonitoring()" style="background:#f56c6c;">⏹ 停止监控</button>
+
       <div id="resultInfo" style="margin-top:15px;font-size:13px;"></div>
     </div>
     <div class="map-container">
@@ -74,59 +31,30 @@
     </div>
   </div>
 
-  <!-- 高德安全配置 -->
   <script>
     window._AMapSecurityConfig = {
       securityJsCode: 'd1696b36a67c28cdee2466920e4bacac'
     }
   </script>
-  
   <script src="https://webapi.amap.com/maps?v=2.0&key=b5280cf1a14f4dea11bb03e25e1b72b9&plugin=AMap.Driving,AMap.Geocoder"></script>
 
   <script>
     let map, startPoint = null, startAddress = '', destinations = [], allRoutes = [];
+    let monitoringInterval = null;
+    let vehicleMarkers = [];
     const MAX_DRIVING_TIME = 6480;
     const STOP_TIME_PER_SITE = 10800;
 
     function initMap() {
-      const mapContainer = document.getElementById('map');
-      
-      if (!mapContainer) {
-        console.error('地图容器不存在');
-        return;
-      }
-
-      if (typeof AMap === 'undefined') {
-        console.error('AMap 未加载');
-        document.getElementById('status').innerHTML = '高德地图加载失败';
-        return;
-      }
-
-      try {
-        map = new AMap.Map('map', {
-          zoom: 11,
-          center: [109.561199, 23.103332],
-          resizeEnable: true,
-          viewMode: '2D'
-        });
-
-        // 延迟执行 resize，解决容器尺寸问题
-        setTimeout(() => {
-          if (map) {
-            map.resize();
-            console.log('✅ 地图 resize 完成，加载完整');
-          }
-        }, 400);
-
-        console.log('✅ 地图初始化成功');
-        document.getElementById('status').innerHTML = '地图加载成功';
-
-      } catch (e) {
-        console.error('地图初始化异常:', e);
-        document.getElementById('status').innerHTML = '地图初始化失败';
-      }
+      map = new AMap.Map('map', {
+        zoom: 11,
+        center: [109.561199, 23.103332],
+        resizeEnable: true
+      });
+      setTimeout(() => { if (map) map.resize(); }, 400);
     }
 
+    // ==================== 获取简道云数据并规划 ====================
     async function getDataFromJiandaoyun() {
       document.getElementById('status').innerHTML = '正在从简道云获取数据...';
       document.getElementById('resultInfo').innerHTML = '';
@@ -143,8 +71,6 @@
         });
 
         const result = await response.json();
-        console.log("简道云返回完整数据:", result);
-
         if (!result.data || result.data.length === 0) {
           document.getElementById('status').innerHTML = '简道云未返回数据';
           return;
@@ -152,7 +78,6 @@
 
         const record = result.data[0];
         destinations = [];
-
         for (let i = 1; i <= 8; i++) {
           const coordStr = record[`addr${i}`];
           if (coordStr && coordStr.trim() !== '') {
@@ -168,7 +93,6 @@
 
         startPoint = new AMap.LngLat(109.561199, 23.103332);
         startAddress = "起点";
-
         await planBatches();
         await writePlanResultToJiandaoyun();
 
@@ -187,14 +111,13 @@
       });
     }
 
+    // ==================== 路线规划逻辑 ====================
     async function planBatches() {
       allRoutes = [];
       let batch = [], batchIndex = 1;
-
       for (let i = 0; i < destinations.length; i++) {
         const tempBatch = [...batch, destinations[i]];
         const drivingTime = await calculateDrivingTime(startPoint, tempBatch);
-
         if ((drivingTime > MAX_DRIVING_TIME || tempBatch.length > 2) && batch.length > 0) {
           const route = await planOneBatch(startPoint, batch, batchIndex);
           allRoutes.push(route);
@@ -204,12 +127,10 @@
           batch = tempBatch;
         }
       }
-
       if (batch.length > 0) {
         const route = await planOneBatch(startPoint, batch, batchIndex);
         allRoutes.push(route);
       }
-
       showAllBatches(allRoutes);
     }
 
@@ -227,42 +148,27 @@
       return new Promise(resolve => {
         const driving = new AMap.Driving({ policy: AMap.DrivingPolicy.LEAST_TIME, hideMarkers: true });
         const waypoints = points.map(p => p.lnglat);
-
         driving.search(start, waypoints[waypoints.length-1], { waypoints: waypoints.slice(0,-1) }, (status, result) => {
           if (status === 'complete' && result.routes.length) {
             const route = result.routes[0];
             const path = route.steps.flatMap(step => step.path || []);
-
-            new AMap.Polyline({
-              map: map,
-              path: path,
-              strokeColor: getBatchColor(batchIndex),
-              strokeWeight: 8,
-              strokeOpacity: 0.9
-            });
+            new AMap.Polyline({ map, path, strokeColor: getBatchColor(batchIndex), strokeWeight: 8, strokeOpacity: 0.9 });
 
             new AMap.Marker({
-              position: start,
-              map: map,
+              position: start, map,
               icon: new AMap.Icon({ image: 'https://webapi.amap.com/theme/v1.3/markers/n/start.png', size: new AMap.Size(30, 45) }),
               label: { content: startAddress, direction: 'top', offset: new AMap.Pixel(0, -50) }
             });
 
             points.forEach(p => {
               new AMap.Marker({
-                position: p.lnglat,
-                map: map,
+                position: p.lnglat, map,
                 icon: new AMap.Icon({ image: 'https://webapi.amap.com/theme/v1.3/markers/n/end.png', size: new AMap.Size(30, 45) }),
                 label: { content: p.address, direction: 'right', offset: new AMap.Pixel(15, 0) }
               });
             });
 
-            resolve({
-              batchIndex,
-              time: route.time,
-              distance: route.distance,
-              points: points
-            });
+            resolve({ batchIndex, time: route.time, distance: route.distance, points });
           }
         });
       });
@@ -276,39 +182,28 @@
     function showAllBatches(routes) {
       let html = `<h4>规划结果（共 ${routes.length} 批次）</h4>`;
       routes.forEach(r => {
-        const drivingHours = (r.time / 3600).toFixed(1);
-        const stopHours = (r.points.length * 3).toFixed(1);
-        html += `
-          <div class="route-batch">
-            <strong>第${r.batchIndex}批次</strong>：${r.points.length}个目的地<br>
-            行驶时间：${drivingHours}小时 | 停留：${stopHours}小时<br>
-            目的地：${r.points.map(p => p.address).join(' → ')}
-          </div>`;
+        html += `<div class="route-batch"><strong>第${r.batchIndex}批次</strong>：${r.points.length}个目的地<br>行驶：${(r.time/3600).toFixed(1)}h | 停留：${(r.points.length*3).toFixed(1)}h</div>`;
       });
       document.getElementById('resultInfo').innerHTML = html;
-      document.getElementById('status').innerHTML = '✅ 规划完成！';
     }
 
     // ==================== 回写简道云 ====================
     async function writePlanResultToJiandaoyun() {
-  const VERCEL_PROXY_URL = "https://jiandaoyun-proxy.vercel.app/api/proxy";
-  const WRITE_APP_ID = "69f2edba8bb15d99bb09b8f9";
-  const WRITE_ENTRY_ID = "6a1e7b26851b5f657059e81f";
+      const VERCEL_PROXY_URL = "https://jiandaoyun-proxy.vercel.app/api/proxy";
+      const WRITE_APP_ID = "69f2edba8bb15d99bb09b8f9";
+      const WRITE_ENTRY_ID = "6a1e7b26851b5f657059e81f";
 
-  const writeList = [];
+      const writeList = [];
+      for (let route of allRoutes) {
+        const dest1 = route.points[0] ? route.points[0].address : "";
+        const dest2 = route.points[1] ? route.points[1].address : "";
+        const totalTime = (route.time + route.points.length * STOP_TIME_PER_SITE) / 3600;
+        const totalDistance = route.distance / 1000;
 
-  for (let route of allRoutes) {
-    const dest1 = route.points[0] ? route.points[0].address : "";
-    const dest2 = route.points[1] ? route.points[1].address : "";
-
-    const totalTime = (route.time + route.points.length * STOP_TIME_PER_SITE) / 3600;
-    const totalDistance = route.distance / 1000;
-
-    // 正确顺序：app_id → entry_id → data
-    writeList.push({
-      app_id: WRITE_APP_ID,
-      entry_id: WRITE_ENTRY_ID,
-      data: {
+        writeList.push({
+          app_id: WRITE_APP_ID,
+          entry_id: WRITE_ENTRY_ID,
+          data: {
             "date": { "value": new Date().toISOString() },
             "batch_id": { "value": `批次${route.batchIndex}` },
             "status": { "value": "待出发" },
@@ -320,27 +215,99 @@
             "total_dest": { "value": parseFloat(totalDistance.toFixed(1)) },
             "gps_sub_table": { "value": [] }
           }
-    });
-  }
+        });
+      }
 
-  try {
-    const res = await fetch(VERCEL_PROXY_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: "save_plan",
-        data_list: writeList
-      })
-    });
+      try {
+        const res = await fetch(VERCEL_PROXY_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: "save_plan", data_list: writeList })
+        });
+        const result = await res.json();
+        console.log("回写结果:", result);
+      } catch (err) {
+        console.error(err);
+      }
+    }
 
-    const result = await res.json();
-    console.log("回写简道云结果:", result);
-    alert(`成功回写 ${writeList.length} 个批次到简道云！`);
-  } catch (err) {
-    console.error(err);
-    alert("回写简道云失败");
-  }
-}
+    // ==================== 车队GPS实时监控（新增功能） ====================
+    let monitoringInterval = null;
+    let vehicleMarkers = [];
+
+    function clearVehicleMarkers() {
+      vehicleMarkers.forEach(m => m.setMap(null));
+      vehicleMarkers = [];
+    }
+
+    async function fetchFleetPositions() {
+      const VERCEL_PROXY_URL = "https://jiandaoyun-proxy.vercel.app/api/proxy";
+      const BATCH_APP_ID = "69f2edba8bb15d99bb09b8f9";
+      const BATCH_ENTRY_ID = "6a1e7b26851b5f657059e81f";
+
+      try {
+        const response = await fetch(VERCEL_PROXY_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ app_id: BATCH_APP_ID, entry_id: BATCH_ENTRY_ID, limit: 50 })
+        });
+
+        const result = await response.json();
+        if (!result.data) return;
+
+        clearVehicleMarkers();
+
+        result.data.forEach(record => {
+          const gpsList = record.gps_sub_table || [];
+          if (gpsList.length === 0) return;
+
+          // TODO: 请根据你实际的子表单字段名修改下面两行
+          const latest = gpsList[gpsList.length - 1];
+          const lng = latest.gps_lng || latest.lng;
+          const lat = latest.gps_lat || latest.lat;
+
+          if (!lng || !lat) return;
+
+          const leaderName = record.team_leader && record.team_leader.value ? record.team_leader.value : '未知';
+
+          const markerContent = `
+            <div style="background:white;padding:4px 10px;border-radius:16px;box-shadow:0 2px 6px rgba(0,0,0,0.3);font-size:13px;display:flex;align-items:center;white-space:nowrap;">
+              <span style="margin-right:6px;">🚚</span>
+              <span>${leaderName}</span>
+            </div>
+          `;
+
+          const marker = new AMap.Marker({
+            position: new AMap.LngLat(lng, lat),
+            map: map,
+            content: markerContent,
+            offset: new AMap.Pixel(-25, -18)
+          });
+
+          vehicleMarkers.push(marker);
+        });
+
+        document.getElementById('status').innerHTML = `车队位置已更新 ${new Date().toLocaleTimeString()}`;
+      } catch (error) {
+        console.error('获取车队GPS失败:', error);
+      }
+    }
+
+    function startFleetMonitoring() {
+      if (monitoringInterval) return;
+      fetchFleetPositions();
+      monitoringInterval = setInterval(fetchFleetPositions, 30000);
+      document.getElementById('status').innerHTML = '车队GPS监控已启动（每30秒刷新）';
+    }
+
+    function stopFleetMonitoring() {
+      if (monitoringInterval) {
+        clearInterval(monitoringInterval);
+        monitoringInterval = null;
+      }
+      clearVehicleMarkers();
+      document.getElementById('status').innerHTML = '车队监控已停止';
+    }
 
     window.onload = function() {
       initMap();
