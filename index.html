@@ -90,10 +90,11 @@
   <script src="https://webapi.amap.com/maps?v=2.0&key=b5280cf1a14f4dea11bb03e25e1b72b9&plugin=AMap.Driving,AMap.Geocoder"></script>
 
   <script>
-    // ==================== 全局变量（只在这里声明一次） ====================
+    // ==================== 全局变量 ====================
     let map, startPoint = null, startAddress = '', destinations = [], allRoutes = [];
     let monitoringInterval = null;
     let vehicleMarkers = [];
+    let currentPlannedBatchIds = [];           // 记录本次规划生成的批次ID
     const MAX_DRIVING_TIME = 6480;
     const STOP_TIME_PER_SITE = 10800;
 
@@ -126,7 +127,7 @@
             console.log('✅ 地图初始化并 resize 完成');
             document.getElementById('status').innerHTML = '地图加载成功';
           }
-        }, 500);
+        }, 400);
 
       } catch (e) {
         console.error('地图初始化异常:', e);
@@ -134,7 +135,7 @@
       }
     }
 
-    // ==================== 获取简道云数据并规划 ====================
+    // ==================== 获取简道云数据 + 规划 + 回写 ====================
     async function getDataFromJiandaoyun() {
       document.getElementById('status').innerHTML = '正在从简道云获取数据...';
       document.getElementById('resultInfo').innerHTML = '';
@@ -297,7 +298,7 @@
       document.getElementById('status').innerHTML = '✅ 规划完成！';
     }
 
-    // ==================== 回写简道云 ====================
+    // ==================== 回写简道云（记录本次规划的批次ID） ====================
     async function writePlanResultToJiandaoyun() {
       const VERCEL_PROXY_URL = "https://jiandaoyun-proxy.vercel.app/api/proxy";
       const WRITE_APP_ID = "69f2edba8bb15d99bb09b8f9";
@@ -342,20 +343,39 @@
 
         const result = await res.json();
         console.log("回写简道云结果:", result);
-        alert(`成功回写 ${writeList.length} 个批次到简道云！`);
+
+        // ==================== 记录本次规划生成的批次ID ====================
+        currentPlannedBatchIds = [];
+        if (result.results && Array.isArray(result.results)) {
+          result.results.forEach(item => {
+            if (item.data && item.data._id) {
+              currentPlannedBatchIds.push(item.data._id);
+            }
+          });
+        }
+
+        alert(`成功回写 ${writeList.length} 个批次！已记录 ${currentPlannedBatchIds.length} 个批次ID用于监控`);
       } catch (err) {
         console.error(err);
         alert("回写简道云失败");
       }
     }
 
-    // ==================== 车队GPS实时监控（变量只使用，不再重复声明） ====================
+    // ==================== 只监控本次规划的批次 ====================
+    let monitoringInterval = null;
+    let vehicleMarkers = [];
+
     function clearVehicleMarkers() {
       vehicleMarkers.forEach(m => m.setMap(null));
       vehicleMarkers = [];
     }
 
     async function fetchFleetPositions() {
+      if (currentPlannedBatchIds.length === 0) {
+        document.getElementById('status').innerHTML = '没有本次规划的批次可监控';
+        return;
+      }
+
       const VERCEL_PROXY_URL = "https://jiandaoyun-proxy.vercel.app/api/proxy";
       const BATCH_APP_ID = "69f2edba8bb15d99bb09b8f9";
       const BATCH_ENTRY_ID = "6a1e7b26851b5f657059e81f";
@@ -367,7 +387,7 @@
           body: JSON.stringify({
             app_id: BATCH_APP_ID,
             entry_id: BATCH_ENTRY_ID,
-            limit: 50
+            limit: 100
           })
         });
 
@@ -376,20 +396,25 @@
 
         clearVehicleMarkers();
 
-        result.data.forEach(record => {
+        // 只保留本次规划的批次
+        const targetBatches = result.data.filter(record => 
+          currentPlannedBatchIds.includes(record._id)
+        );
+
+        targetBatches.forEach(record => {
           const gpsList = record.gps_sub_table || [];
           if (gpsList.length === 0) return;
 
           // TODO: 根据你实际子表单字段名修改下面两行
           const latest = gpsList[gpsList.length - 1];
-          const lng = latest.longitude || latest.lng;
-          const lat = latest.latitude || latest.lat;
+          const lng = latest.gps_lng || latest.lng;
+          const lat = latest.gps_lat || latest.lat;
 
           if (!lng || !lat) return;
 
           const leaderName = record.team_leader && record.team_leader.value 
             ? record.team_leader.value 
-            : '未知车队长';
+            : `批次${record.batch_id?.value || ''}`;
 
           const markerContent = `
             <div style="background:white;padding:4px 10px;border-radius:16px;box-shadow:0 2px 6px rgba(0,0,0,0.3);font-size:13px;display:flex;align-items:center;white-space:nowrap;">
@@ -408,17 +433,23 @@
           vehicleMarkers.push(marker);
         });
 
-        document.getElementById('status').innerHTML = `车队位置已更新 ${new Date().toLocaleTimeString()}`;
+        document.getElementById('status').innerHTML = 
+          `正在监控本次规划的 ${targetBatches.length} 个批次 ${new Date().toLocaleTimeString()}`;
       } catch (error) {
         console.error('获取车队GPS失败:', error);
       }
     }
 
     function startFleetMonitoring() {
+      if (currentPlannedBatchIds.length === 0) {
+        alert('请先进行路线规划并回写到简道云后再启动监控');
+        return;
+      }
       if (monitoringInterval) return;
+
       fetchFleetPositions();
       monitoringInterval = setInterval(fetchFleetPositions, 30000);
-      document.getElementById('status').innerHTML = '车队GPS监控已启动（每30秒刷新）';
+      document.getElementById('status').innerHTML = '车队GPS监控已启动（仅监控本次规划批次）';
     }
 
     function stopFleetMonitoring() {
