@@ -291,55 +291,56 @@
 
     // ==================== 回写简道云 ====================
     async function writePlanResultToJiandaoyun() {
-      const VERCEL_PROXY_URL = "https://jiandaoyun-proxy.vercel.app/api/proxy";
-      const WRITE_APP_ID = "69f2edba8bb15d99bb09b8f9";
-      const WRITE_ENTRY_ID = "6a1e7b26851b5f657059e81f";
+  const VERCEL_PROXY_URL = "https://jiandaoyun-proxy.vercel.app/api/proxy";
+  const WRITE_APP_ID = "69f2edba8bb15d99bb09b8f9";
+  const WRITE_ENTRY_ID = "6a1e7b26851b5f657059e81f";
 
-      const writeList = [];
+  const writeList = [];
 
-      for (let route of allRoutes) {
-        const dest1 = route.points[0] ? route.points[0].address : "";
-        const dest2 = route.points[1] ? route.points[1].address : "";
+  for (let route of allRoutes) {
+    const dest1 = route.points[0] ? route.points[0].address : "";
+    const dest2 = route.points[1] ? route.points[1].address : "";
 
-        const totalTime = (route.time + route.points.length * STOP_TIME_PER_SITE) / 3600;
-        const totalDistance = route.distance / 1000;
+    const totalTime = (route.time + route.points.length * STOP_TIME_PER_SITE) / 3600;
+    const totalDistance = route.distance / 1000;
 
-        writeList.push({
-          app_id: WRITE_APP_ID,
-          entry_id: WRITE_ENTRY_ID,
-          data: {
-            "date": new Date().toISOString(),
-            "batch_id": `批次${route.batchIndex}`,
-            "status": "待出发",
-            "team_leader": "",
-            "start_addr": "109.561199,23.103332",
-            "target_addr1": dest1,
-            "target_addr2": dest2,
-            "total_time": parseFloat(totalTime.toFixed(1)),
-            "total_dest": parseFloat(totalDistance.toFixed(1)),
-            "gps_sub_table": []
-          }
-        });
+    // 正确顺序：app_id → entry_id → data
+    writeList.push({
+      app_id: WRITE_APP_ID,
+      entry_id: WRITE_ENTRY_ID,
+      data: {
+        "date": new Date().toISOString(),
+        "batch_id": `批次${route.batchIndex}`,
+        "status": "待出发",
+        "team_leader": "",
+        "start_addr": "109.561199,23.103332",
+        "target_addr1": dest1,
+        "target_addr2": dest2,
+        "total_time": parseFloat(totalTime.toFixed(1)),
+        "total_dest": parseFloat(totalDistance.toFixed(1)),
+        "gps_sub_table": []
       }
+    });
+  }
 
-      try {
-        const res = await fetch(VERCEL_PROXY_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: "save_plan",
-            data_list: writeList
-          })
-        });
+  try {
+    const res = await fetch(VERCEL_PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: "save_plan",
+        data_list: writeList
+      })
+    });
 
-        const result = await res.json();
-        console.log("回写简道云结果:", result);
-        alert(`成功回写 ${writeList.length} 个批次到简道云！`);
-      } catch (err) {
-        console.error(err);
-        alert("回写简道云失败");
-      }
-    }
+    const result = await res.json();
+    console.log("回写简道云结果:", result);
+    alert(`成功回写 ${writeList.length} 个批次到简道云！`);
+  } catch (err) {
+    console.error(err);
+    alert("回写简道云失败");
+  }
+}
 
     window.onload = function() {
       initMap();
