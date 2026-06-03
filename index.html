@@ -7,7 +7,6 @@
     html,body,#map{height:100%;margin:0;padding:0;font-family:Microsoft Yahei,sans-serif;}
     .container {display:flex;height:100%;}
     .sidebar {width:340px;background:#fff;border-right:1px solid #ddd;padding:15px;overflow:auto;}
-    .map-container {flex:1;position:relative;}
     button {padding:12px 20px;background:#67c23a;color:white;border:none;border-radius:6px;cursor:pointer;font-size:16px;width:100%;}
     .route-batch {margin-bottom:12px;padding:8px;background:#f8f9fa;border-radius:6px;border-left:4px solid #67c23a;}
   </style>
@@ -25,17 +24,15 @@
     </div>
   </div>
 
-  <!-- 高德地图安全配置（必须放在脚本之前） -->
   <script>
     window._AMapSecurityConfig = {
       securityJsCode: 'd1696b36a67c28cdee2466920e4bacac'
     }
   </script>
-  
   <script src="https://webapi.amap.com/maps?v=2.0&key=b5280cf1a14f4dea11bb03e25e1b72b9&plugin=AMap.Driving,AMap.Geocoder"></script>
 
   <script>
-    let map, startPoint = null, startAddress = '', destinations = [];
+    let map, startPoint = null, startAddress = '', destinations = [], allRoutes = [];
     const MAX_DRIVING_TIME = 6480;
     const STOP_TIME_PER_SITE = 10800;
 
@@ -55,20 +52,11 @@
         const response = await fetch(VERCEL_PROXY_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            app_id: APP_ID,
-            entry_id: ENTRY_ID
-          })
+          body: JSON.stringify({ app_id: APP_ID, entry_id: ENTRY_ID })
         });
 
         const result = await response.json();
-        console.log("简道云返回完整数据:", result);
-
-        if (result.error) {
-          document.getElementById('status').innerHTML = '简道云返回错误: ' + result.error;
-          console.error(result);
-          return;
-        }
+        console.log("简道云返回数据:", result);
 
         if (!result.data || result.data.length === 0) {
           document.getElementById('status').innerHTML = '简道云未返回数据';
@@ -76,15 +64,13 @@
         }
 
         const record = result.data[0];
-
         destinations = [];
+
         for (let i = 1; i <= 8; i++) {
           const coordStr = record[`addr${i}`];
           if (coordStr && coordStr.trim() !== '') {
             const lnglat = await getLngLat(coordStr);
-            if (lnglat) {
-              destinations.push({ lnglat: lnglat, address: coordStr });
-            }
+            if (lnglat) destinations.push({ lnglat, address: coordStr });
           }
         }
 
@@ -97,10 +83,11 @@
         startAddress = "起点";
 
         await planBatches();
+        await writePlanResultToJiandaoyun();
 
       } catch (error) {
         console.error(error);
-        document.getElementById('status').innerHTML = '调用简道云失败（fetch failed）';
+        document.getElementById('status').innerHTML = '调用失败';
       }
     }
 
@@ -109,21 +96,13 @@
         if (str.includes(',')) {
           const [lng, lat] = str.split(',').map(Number);
           resolve(new AMap.LngLat(lng, lat));
-        } else {
-          const geocoder = new AMap.Geocoder();
-          geocoder.getLocation(str, (status, result) => {
-            if (status === 'complete' && result.geocodes.length) {
-              resolve(result.geocodes[0].location);
-            } else {
-              resolve(null);
-            }
-          });
         }
       });
     }
 
     async function planBatches() {
-      let batch = [], batchIndex = 1, allRoutes = [];
+      allRoutes = [];
+      let batch = [], batchIndex = 1;
 
       for (let i = 0; i < destinations.length; i++) {
         const tempBatch = [...batch, destinations[i]];
@@ -151,7 +130,7 @@
       return new Promise(resolve => {
         const driving = new AMap.Driving({ policy: AMap.DrivingPolicy.LEAST_TIME });
         const waypoints = points.map(p => p.lnglat);
-        driving.search(start, waypoints[waypoints.length - 1], { waypoints: waypoints.slice(0, -1) }, (status, result) => {
+        driving.search(start, waypoints[waypoints.length-1], { waypoints: waypoints.slice(0,-1) }, (status, result) => {
           resolve(status === 'complete' && result.routes.length ? result.routes[0].time : 999999);
         });
       });
@@ -162,7 +141,7 @@
         const driving = new AMap.Driving({ policy: AMap.DrivingPolicy.LEAST_TIME, hideMarkers: true });
         const waypoints = points.map(p => p.lnglat);
 
-        driving.search(start, waypoints[waypoints.length - 1], { waypoints: waypoints.slice(0, -1) }, (status, result) => {
+        driving.search(start, waypoints[waypoints.length-1], { waypoints: waypoints.slice(0,-1) }, (status, result) => {
           if (status === 'complete' && result.routes.length) {
             const route = result.routes[0];
             const path = route.steps.flatMap(step => step.path || []);
@@ -191,7 +170,12 @@
               });
             });
 
-            resolve({ time: route.time, distance: route.distance, points: points, batchIndex });
+            resolve({
+              batchIndex,
+              time: route.time,
+              distance: route.distance,
+              points: points
+            });
           }
         });
       });
@@ -199,36 +183,75 @@
 
     function getBatchColor(index) {
       const colors = ['#FF0000', '#00FF00', '#0000FF', '#FF00FF', '#00FFFF'];
-      return colors[(index - 1) % colors.length];
+      return colors[(index-1) % colors.length];
     }
 
     function showAllBatches(routes) {
       let html = `<h4>规划结果（共 ${routes.length} 批次）</h4>`;
-      let totalTime = 0;
-
       routes.forEach(r => {
         const drivingHours = (r.time / 3600).toFixed(1);
         const stopHours = (r.points.length * 3).toFixed(1);
-        const batchTotalHours = (r.time / 3600 + r.points.length * 3).toFixed(1);
-        totalTime += r.time + r.points.length * 10800;
-
         html += `
           <div class="route-batch">
             <strong>第${r.batchIndex}批次</strong>：${r.points.length}个目的地<br>
-            行驶时间：${drivingHours}小时<br>
-            停留时间：${stopHours}小时（每个站点3小时）<br>
-            <strong>本批次总计：${batchTotalHours}小时</strong><br>
+            行驶时间：${drivingHours}小时 | 停留：${stopHours}小时<br>
             目的地：${r.points.map(p => p.address).join(' → ')}
           </div>`;
       });
-
-      const totalHours = (totalTime / 3600).toFixed(1);
-      html += `<div style="margin-top:15px;padding:10px;background:#f0f0f0;border-radius:6px;">
-                 <strong>所有批次总计用时：</strong>${totalHours}小时
-               </div>`;
-
       document.getElementById('resultInfo').innerHTML = html;
       document.getElementById('status').innerHTML = '✅ 规划完成！';
+    }
+
+    // ==================== 回写简道云（严格按照你提供的字段） ====================
+    async function writePlanResultToJiandaoyun() {
+      const VERCEL_PROXY_URL = "https://jiandaoyun-proxy.vercel.app/api/proxy";
+      const WRITE_APP_ID = "69f2edba8bb15d99bb09b8f9";
+      const WRITE_ENTRY_ID = "6a1e7b26851b5f657059e81f";
+
+      const writeList = [];
+
+      for (let route of allRoutes) {
+        const dest1 = route.points[0] ? route.points[0].address : "";
+        const dest2 = route.points[1] ? route.points[1].address : "";
+
+        const totalTime = (route.time + route.points.length * STOP_TIME_PER_SITE) / 3600;
+        const totalDistance = route.distance / 1000;
+
+        writeList.push({
+          app_id: WRITE_APP_ID,
+          entry_id: WRITE_ENTRY_ID,
+          data: {
+            "date": new Date().toISOString(),
+            "batch_id": `批次${route.batchIndex}`,
+            "status": "待出发",
+            "team_leader": "",                    // 后续在简道云指派
+            "start_addr": "109.561199,23.103332",
+            "target_addr1": dest1,
+            "target_addr2": dest2,
+            "total_time": parseFloat(totalTime.toFixed(1)),
+            "total_dest": parseFloat(totalDistance.toFixed(1)),
+            "gps_sub_table": []                    // GPS轨迹明细子表单（初始为空）
+          }
+        });
+      }
+
+      try {
+        const res = await fetch(VERCEL_PROXY_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: "save_plan",
+            data_list: writeList
+          })
+        });
+
+        const result = await res.json();
+        console.log("回写简道云结果:", result);
+        alert(`成功回写 ${writeList.length} 个批次到简道云！`);
+      } catch (err) {
+        console.error(err);
+        alert("回写简道云失败");
+      }
     }
 
     window.onload = function() {
