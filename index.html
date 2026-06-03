@@ -310,15 +310,8 @@
       entry_id: WRITE_ENTRY_ID,
       data: {
         "date": new Date().toISOString(),
-        "batch_id": `批次${route.batchIndex}`,
         "status": "待出发",
-        "team_leader": "",
         "start_addr": "109.561199,23.103332",
-        "target_addr1": dest1,
-        "target_addr2": dest2,
-        "total_time": parseFloat(totalTime.toFixed(1)),
-        "total_dest": parseFloat(totalDistance.toFixed(1)),
-        "gps_sub_table": []
       }
     });
   }
