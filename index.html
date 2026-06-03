@@ -367,74 +367,89 @@
       vehicleMarkers = [];
     }
 
-    async function fetchFleetPositions() {
-      if (currentPlannedBatchIds.length === 0) {
-        document.getElementById('status').innerHTML = '没有本次规划的批次可监控';
+   async function fetchFleetPositions() {
+  console.log("=== fetchFleetPositions 开始执行 ===");
+
+  if (currentPlannedBatchIds.length === 0) {
+    console.log("currentPlannedBatchIds 为空，直接返回");
+    document.getElementById('status').innerHTML = '没有本次规划的批次可监控';
+    return;
+  }
+
+  console.log("currentPlannedBatchIds 长度:", currentPlannedBatchIds.length);
+
+  const VERCEL_PROXY_URL = "https://jiandaoyun-proxy.vercel.app/api/proxy";
+  const BATCH_APP_ID = "69f2edba8bb15d99bb09b8f9";
+  const BATCH_ENTRY_ID = "6a1e7b26851b5f657059e81f";
+
+  try {
+    const response = await fetch(VERCEL_PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        app_id: BATCH_APP_ID,
+        entry_id: BATCH_ENTRY_ID,
+        limit: 100
+      })
+    });
+
+    const result = await response.json();
+    console.log("从简道云获取到的批次总数:", result.data ? result.data.length : 0);
+
+    if (!result.data) return;
+
+    clearVehicleMarkers();
+
+    const targetBatches = result.data.filter(record => 
+      currentPlannedBatchIds.includes(record._id)
+    );
+
+    console.log("筛选后符合本次规划的批次数量:", targetBatches.length);
+
+    targetBatches.forEach(record => {
+      const gpsList = record.gps_sub_table || [];
+      console.log(`批次 ${record._id} 的 GPS 数量:`, gpsList.length);
+
+      if (gpsList.length === 0) return;
+
+      const latest = gpsList[gpsList.length - 1];
+      console.log("最新 GPS 数据 latest 对象:", latest);
+
+      const lng = parseFloat(latest.gps_lng);
+      const lat = parseFloat(latest.gps_lat);
+
+      if (!lng || !lat || isNaN(lng) || isNaN(lat)) {
+        console.warn("坐标无效，跳过此批次");
         return;
       }
 
-      const VERCEL_PROXY_URL = "https://jiandaoyun-proxy.vercel.app/api/proxy";
-      const BATCH_APP_ID = "69f2edba8bb15d99bb09b8f9";
-      const BATCH_ENTRY_ID = "6a1e7b26851b5f657059e81f";
+      const leaderName = record.team_leader && record.team_leader.value 
+        ? record.team_leader.value 
+        : `批次${record.batch_id?.value || ''}`;
 
-      try {
-        const response = await fetch(VERCEL_PROXY_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            app_id: BATCH_APP_ID,
-            entry_id: BATCH_ENTRY_ID,
-            limit: 100
-          })
-        });
+      const markerContent = `
+        <div style="background:white;padding:4px 10px;border-radius:16px;box-shadow:0 2px 6px rgba(0,0,0,0.3);font-size:13px;display:flex;align-items:center;white-space:nowrap;">
+          <span style="margin-right:6px;">🚚</span>
+          <span>${leaderName}</span>
+        </div>
+      `;
 
-        const result = await response.json();
-        if (!result.data) return;
+      const marker = new AMap.Marker({
+        position: new AMap.LngLat(lng, lat),
+        map: map,
+        content: markerContent,
+        offset: new AMap.Pixel(-25, -18)
+      });
 
-        clearVehicleMarkers();
+      vehicleMarkers.push(marker);
+    });
 
-        const targetBatches = result.data.filter(record => 
-          currentPlannedBatchIds.includes(record._id)
-        );
-
-        targetBatches.forEach(record => {
-          const gpsList = record.gps_sub_table || [];
-          if (gpsList.length === 0) return;
-
-          const latest = gpsList[gpsList.length - 1];
-          console.log("最新 GPS 数据 latest 对象:", latest);   // ← 新增这行
-          const lng = parseFloat(latest.gps_lng);
-          const lat = parseFloat(latest.gps_lat);
-
-          if (!lng || !lat || isNaN(lng) || isNaN(lat)) return;
-
-          const leaderName = record.team_leader && record.team_leader.value 
-            ? record.team_leader.value 
-            : `批次${record.batch_id?.value || ''}`;
-
-          const markerContent = `
-            <div style="background:white;padding:4px 10px;border-radius:16px;box-shadow:0 2px 6px rgba(0,0,0,0.3);font-size:13px;display:flex;align-items:center;white-space:nowrap;">
-              <span style="margin-right:6px;">🚚</span>
-              <span>${leaderName}</span>
-            </div>
-          `;
-
-          const marker = new AMap.Marker({
-            position: new AMap.LngLat(lng, lat),
-            map: map,
-            content: markerContent,
-            offset: new AMap.Pixel(-25, -18)
-          });
-
-          vehicleMarkers.push(marker);
-        });
-
-        document.getElementById('status').innerHTML = 
-          `正在监控本次规划的 ${targetBatches.length} 个批次 ${new Date().toLocaleTimeString()}`;
-      } catch (error) {
-        console.error('获取车队GPS失败:', error);
-      }
-    }
+    document.getElementById('status').innerHTML = 
+      `正在监控 ${targetBatches.length} 个批次 ${new Date().toLocaleTimeString()}`;
+  } catch (error) {
+    console.error('获取车队GPS失败:', error);
+  }
+}
 
     function startFleetMonitoring() {
       if (currentPlannedBatchIds.length === 0) {
