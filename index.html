@@ -364,15 +364,13 @@
       vehicleMarkers = [];
     }
     
-  async function fetchFleetPositions() {
+async function fetchFleetPositions() {
   console.log("【调试】fetchFleetPositions 开始执行");
 
   if (currentPlannedBatchIds.length === 0) {
     document.getElementById('status').innerHTML = '没有本次规划的批次可监控';
     return;
   }
-
-  console.log("【调试】currentPlannedBatchIds:", currentPlannedBatchIds);
 
   const VERCEL_PROXY_URL = "https://jiandaoyun-proxy.vercel.app/api/proxy";
   const BATCH_APP_ID = "69f2edba8bb15d99bb09b8f9";
@@ -390,35 +388,41 @@
     });
 
     const result = await response.json();
-    console.log("【调试】从简道云获取到的总批次数量:", result.data?.length || 0);
 
     if (!result.data) return;
 
     clearVehicleMarkers();
 
-    const targetBatches = result.data.filter(record => {
-      const batchIdValue = record.batch_id;   // 直接取字符串
-      return currentPlannedBatchIds.includes(batchIdValue);
-    });
+    const targetBatches = result.data.filter(record => 
+      currentPlannedBatchIds.includes(record.batch_id)
+    );
 
-    console.log("【调试】筛选后符合条件的批次数量:", targetBatches.length);
+    console.log("【调试】匹配成功的批次数量:", targetBatches.length);
 
-    targetBatches.forEach(record => {
+    targetBatches.forEach((record, index) => {
+      console.log(`【调试】开始处理第 ${index + 1} 个匹配批次`);
+
       const gpsList = record.gps_sub_table || [];
-      if (gpsList.length === 0) return;
+      console.log(`【调试】第 ${index + 1} 个批次 GPS 数据条数:`, gpsList.length);
 
-      const latest = gpsList[gpsList.length - 1];
-
-      // 直接取 gps_lng 和 gps_lat（不需要 .value）
-      const lng = parseFloat(latest.gps_lng);
-      const lat = parseFloat(latest.gps_lat);
-
-      if (!lng || !lat || isNaN(lng) || isNaN(lat)) {
-        console.warn("坐标解析失败", latest);
+      if (gpsList.length === 0) {
+        console.log(`【调试】第 ${index + 1} 个批次没有 GPS 数据，跳过`);
         return;
       }
 
-      // team_leader 是对象，取 .name
+      const latest = gpsList[gpsList.length - 1];
+      console.log(`【调试】第 ${index + 1} 个批次 latest 数据:`, latest);
+
+      const lng = parseFloat(latest.gps_lng);
+      const lat = parseFloat(latest.gps_lat);
+
+      console.log(`【调试】第 ${index + 1} 个批次 解析后坐标: lng=${lng}, lat=${lat}`);
+
+      if (!lng || !lat || isNaN(lng) || isNaN(lat)) {
+        console.warn(`【调试】第 ${index + 1} 个批次 坐标无效，跳过`);
+        return;
+      }
+
       const leaderName = record.team_leader?.name || `批次${record.batch_id || ''}`;
 
       const markerContent = `
@@ -436,6 +440,7 @@
       });
 
       vehicleMarkers.push(marker);
+      console.log(`【调试】第 ${index + 1} 个车辆标记创建成功`);
     });
 
     document.getElementById('status').innerHTML = 
