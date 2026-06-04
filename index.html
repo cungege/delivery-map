@@ -390,6 +390,8 @@
 
         clearVehicleMarkers();
 
+        console.log("currentPlannedBatchIds:", currentPlannedBatchIds);
+        console.log("查询回来的第一条记录 _id:", result.data[0]?._id);
         const targetBatches = result.data.filter(record => {
           const batchIdValue = record.batch_id && record.batch_id.value;
           return currentPlannedBatchIds.includes(batchIdValue);
