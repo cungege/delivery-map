@@ -403,6 +403,7 @@
     const targetBatches = result.data.filter(record => {
       const batchIdValue = record.batch_id && record.batch_id.value;
       const isMatch = currentPlannedBatchIds.includes(batchIdValue);
+      console.log("【调试】获取到的batch_id，批次ID:", batchIdValue);
       if (isMatch) {
         console.log("【调试】匹配成功，批次ID:", batchIdValue);
       }
