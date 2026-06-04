@@ -402,15 +402,16 @@
 
     const targetBatches = result.data.filter(record => {
       const batchIdValue = record.batch_id && record.batch_id.value;
+      
+      // 新增调试日志
+      console.log("【调试】查询回来的批次 batch_id.value =", batchIdValue);
+      
       const isMatch = currentPlannedBatchIds.includes(batchIdValue);
-      console.log("【调试】获取到的batch_id，批次ID:", batchIdValue);
-      if (isMatch) {
-        console.log("【调试】匹配成功，批次ID:", batchIdValue);
-      }
       return isMatch;
     });
 
     console.log("【调试】筛选后符合条件的批次数量:", targetBatches.length);
+
 
     targetBatches.forEach((record, index) => {
       const gpsList = record.gps_sub_table || [];
